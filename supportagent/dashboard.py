@@ -3,7 +3,7 @@ import os
 import requests
 import streamlit as st
 
-from .config import load_env_file
+from supportagent.config import load_env_file
 
 load_env_file()
 
