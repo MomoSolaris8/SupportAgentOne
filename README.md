@@ -18,7 +18,7 @@ Copy `.env.example` to `.env` and fill in:
 - `ATLASSIAN_BASE_URL`, `ATLASSIAN_EMAIL`, `ATLASSIAN_API_TOKEN` - Confluence/Jira Cloud API token
 - `CONFLUENCE_SPACE_KEY`, `JIRA_PROJECT_KEY` - the space/project to read from and write to
 - `EMBEDDING_API_KEY` - Alibaba Cloud Model Studio (DashScope) API key, used via its
-  OpenAI-compatible endpoint (`EMBEDDING_BASE_URL`)
+  OpenAI-compatible endpoint (`EMBEDDING_BASE_URL`) for both embeddings and chat (`CHAT_MODEL`)
 - `DATABASE_URL` - points at the pgvector container started by `docker compose up`
 
 ## Pipeline
@@ -33,6 +33,17 @@ python -m supportagent.ingest
 # 3. Chunk -> embed -> store in pgvector
 python -m supportagent.index
 ```
+
+## RAG Answer API
+
+```bash
+uvicorn supportagent.api:app --reload
+```
+
+`POST /ask` with `{"question": "..."}` retrieves relevant chunks from pgvector,
+generates a German answer with citations (`[1]`, `[2]`, ...), and returns the
+cited sources. If the retrieved context doesn't support an answer, it returns
+a fixed controlled-refusal message instead.
 
 ### PDF data prep
 
