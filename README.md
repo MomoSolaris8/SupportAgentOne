@@ -56,6 +56,18 @@ single-source retrieval, multi-source synthesis, conflicting sources,
 terminology robustness, and controlled refusal, and prints a pass/fail
 report against the live pipeline.
 
+## Dashboard
+
+```bash
+streamlit run supportagent/dashboard.py
+```
+
+A simple chat UI on top of `/ask` (run `uvicorn` first, see above): ask a
+German question, filter by source (Confluence/Jira/all) in the sidebar, and
+expand each cited source to preview its content and open the original
+Confluence page or Jira issue. Set `API_BASE_URL` if the API isn't on
+`http://localhost:8000`.
+
 ### PDF data prep
 
 `pdf_to_confluence.py` extracts `§`-numbered sections from German insurance

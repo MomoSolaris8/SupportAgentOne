@@ -51,15 +51,27 @@ def upsert_chunk(conn: psycopg.Connection, chunk: dict, embedding: list[float]) 
     )
 
 
-def search(conn: psycopg.Connection, query_embedding: list[float], limit: int = 5) -> list[dict]:
+def search(
+    conn: psycopg.Connection,
+    query_embedding: list[float],
+    limit: int = 5,
+    source_filter: str | None = None,
+) -> list[dict]:
+    where_clause = "WHERE metadata->>'source' = %s" if source_filter else ""
+    params: list = [query_embedding]
+    if source_filter:
+        params.append(source_filter)
+    params.append(limit)
+
     rows = conn.execute(
-        """
+        f"""
         SELECT document_id, chunk_index, content, metadata, embedding <=> %s::vector AS distance
         FROM chunks
+        {where_clause}
         ORDER BY distance
         LIMIT %s
         """,
-        (query_embedding, limit),
+        params,
     ).fetchall()
     return [
         {
