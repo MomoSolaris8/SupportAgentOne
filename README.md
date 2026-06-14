@@ -45,6 +45,17 @@ generates a German answer with citations (`[1]`, `[2]`, ...), and returns the
 cited sources. If the retrieved context doesn't support an answer, it returns
 a fixed controlled-refusal message instead.
 
+### Evaluation
+
+```bash
+python -m supportagent.eval
+```
+
+Runs a small set of German questions (`eval_questions.py`) covering
+single-source retrieval, multi-source synthesis, conflicting sources,
+terminology robustness, and controlled refusal, and prints a pass/fail
+report against the live pipeline.
+
 ### PDF data prep
 
 `pdf_to_confluence.py` extracts `§`-numbered sections from German insurance

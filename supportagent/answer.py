@@ -25,7 +25,10 @@ Dokumentationslücke hindeutet.
 Wenn die Quellen nicht ausreichen, um die Frage verlässlich zu beantworten, antworte exakt \
 mit folgendem Text und sonst nichts:
 
-{REFUSAL_TEXT}"""
+{REFUSAL_TEXT}
+
+Gib niemals beides aus. Entscheide dich entweder für eine vollständige Antwort mit Zitaten \
+oder für den Ablehnungstext, nie für beides zusammen."""
 
 
 def generate_answer(question: str, chunks: list[dict]) -> str:
