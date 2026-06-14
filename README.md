@@ -4,6 +4,22 @@ RAG pipeline over a real Confluence space + Jira project, for the
 "Insurance Knowledge Search Dashboard" portfolio project. See
 `architecture-proposal-v0.1.de.md` for the full design.
 
+## Screenshots
+
+Dashboard: ask a German question and get an answer with cited, expandable sources.
+
+![Dashboard with cited sources](screenshots/Dashboard1.png)
+
+![Dashboard answering a general "versicherung" query](screenshots/confluence_dashboard.png)
+
+`/ask` API schema (FastAPI Swagger UI):
+
+![FastAPI /ask schema](screenshots/fastapi_doc1.png)
+
+The real Jira project (KAN) backing the "documentation gap" tickets used as sources:
+
+![Jira board](screenshots/Jira_dashboard1.png)
+
 ## Setup
 
 ```bash
