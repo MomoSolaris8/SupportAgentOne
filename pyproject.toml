@@ -6,3 +6,6 @@ dependencies = ["pypdf", "openai", "psycopg[binary]", "pgvector", "fastapi", "uv
 
 [project.optional-dependencies]
 dev = ["pytest"]
+
+[tool.vercel]
+entrypoint = "supportagent.api:app"
