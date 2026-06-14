@@ -7,6 +7,9 @@
 # Local raw source PDFs for data prep (kept out of git, can be large)
 data/raw/
 
+# Stray lockfile from uv (PyCharm's uv integration); project uses pip + venv.
+uv.lock
+
 ### macOS ###
 # General
 .DS_Store
