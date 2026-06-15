@@ -4,6 +4,71 @@ RAG pipeline over a real Confluence space + Jira project, for the
 "Insurance Knowledge Search Dashboard" portfolio project. See
 `architecture-proposal-v0.1.de.md` for the full design.
 
+## Architecture (Prototype / MVP Deployment)
+
+```mermaid
+graph TD
+    User[👤 Browser]
+
+    subgraph SC["🌐 Frontend"]
+        Dashboard[dashboard.py<br/>Streamlit]
+    end
+
+    subgraph VC["⚡ Backend API"]
+        API[api.py<br/>POST /ask]
+        Retrieval[retrieval.py<br/>retrieve]
+        Answer[answer.py<br/>generate_answer]
+    end
+
+    subgraph SB["🗄️ Database"]
+        PG[(Postgres + pgvector)]
+    end
+
+    subgraph DS["🤖 AI Services"]
+        Embed[text-embedding-v3]
+        Chat[qwen3-max]
+    end
+
+    User -->|ask question| Dashboard
+    Dashboard -->|POST /ask| API
+
+    API --> Retrieval
+    Retrieval --> Embed
+    Embed --> Retrieval
+
+    Retrieval --> PG
+    PG --> Retrieval
+
+    Retrieval --> API
+
+    API --> Answer
+    Answer --> Chat
+    Chat --> Answer
+
+    Answer --> API
+    API --> Dashboard
+    Dashboard --> User
+
+    %% Colors
+    classDef frontend fill:#4f46e5,color:#fff
+    classDef backend fill:#059669,color:#fff
+    classDef database fill:#dc2626,color:#fff
+    classDef ai fill:#ea580c,color:#fff
+    classDef user fill:#6b7280,color:#fff
+
+    class Dashboard frontend
+    class API,Retrieval,Answer backend
+    class PG database
+    class Embed,Chat ai
+    class User user
+```
+
+- `api.py` is a thin controller: it just calls `retrieve()` then `generate_answer()`.
+- Two external calls go to DashScope: one to embed the question, one to generate
+  the final answer from the retrieved chunks.
+- The Streamlit dashboard calls the Vercel API server-to-server (`requests.post`),
+  so no CORS configuration is needed.
+
 ## Screenshots
 
 Dashboard: ask a German question and get an answer with cited, expandable sources.
