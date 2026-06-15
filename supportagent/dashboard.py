@@ -3,9 +3,9 @@ import os
 import requests
 import streamlit as st
 
-from supportagent.config import load_env_file
+from dotenv import load_dotenv
 
-load_env_file()
+load_dotenv()
 
 API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
 

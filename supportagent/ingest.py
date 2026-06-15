@@ -4,7 +4,7 @@ from dataclasses import asdict
 
 from .adf_utils import adf_to_text
 from .atlassian_client import AtlassianClient
-from .config import load_env_file
+from dotenv import load_dotenv
 from .html_utils import html_to_text
 from .models import Document
 from .seed import INSURANCE_KB_LABEL
@@ -86,7 +86,7 @@ def collect_documents() -> list[Document]:
 
 
 def main() -> None:
-    load_env_file()
+    load_dotenv()
     documents = collect_documents()
     print(json.dumps([asdict(doc) for doc in documents], ensure_ascii=False, indent=2))
 

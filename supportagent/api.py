@@ -4,10 +4,10 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 
 from .answer import generate_answer
-from .config import load_env_file
+from dotenv import load_dotenv
 from .retrieval import retrieve
 
-load_env_file()
+load_dotenv()
 
 app = FastAPI(title="SupportAgent")
 #app = FastAPI(title="SupportAgent", debug=True)

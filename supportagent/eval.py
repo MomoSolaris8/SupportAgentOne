@@ -6,7 +6,7 @@ question for manual review of the generated answers.
 """
 
 from .answer import generate_answer
-from .config import load_env_file
+from dotenv import load_dotenv
 from .eval_questions import EVAL_QUESTIONS
 from .retrieval import retrieve
 
@@ -19,7 +19,7 @@ _REFUSAL_PHRASES = [
 
 
 def run() -> None:
-    load_env_file()
+    load_dotenv()
 
     passed = 0
     for case in EVAL_QUESTIONS:

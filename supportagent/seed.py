@@ -4,7 +4,7 @@ from pathlib import Path
 
 from .adf_utils import text_to_adf
 from .atlassian_client import AtlassianClient
-from .config import load_env_file
+from dotenv import load_dotenv
 from .seed_content import CONFLUENCE_PAGES, JIRA_ISSUES, PROJECTS
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,7 +23,7 @@ def load_confluence_pages() -> list[dict]:
 
 
 def main() -> None:
-    load_env_file()
+    load_dotenv()
 
     base_url = os.environ["ATLASSIAN_BASE_URL"]
     email = os.environ["ATLASSIAN_EMAIL"]

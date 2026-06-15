@@ -1,14 +1,14 @@
 import os
 
 from .chunking import chunk_document
-from .config import load_env_file
+from dotenv import load_dotenv
 from .embeddings import embed_texts, get_embedding_client
 from .ingest import collect_documents
 from .vector_store import create_schema, get_connection, upsert_chunk
 
 
 def main() -> None:
-    load_env_file()
+    load_dotenv()
 
     documents = collect_documents()
     chunks = [chunk for doc in documents for chunk in chunk_document(doc)]
