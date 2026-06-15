@@ -9,8 +9,8 @@ from .retrieval import retrieve
 
 load_env_file()
 
-app = FastAPI(title="SupportAgent")
-
+#app = FastAPI(title="SupportAgent")
+app = FastAPI(title="SupportAgent", debug=True)
 
 class AskRequest(BaseModel):
     question: str
