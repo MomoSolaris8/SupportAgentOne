@@ -30,6 +30,15 @@ for question, result in reversed(st.session_state.history):
         st.write(question)
     with st.chat_message("assistant"):
         st.write(result["answer"])
+        trace = result.get("trace")
+        if trace:
+            with st.expander("Agent trace"):
+                st.write(f"Route: {trace['route_source']}")
+                st.write(f"Route reason: {trace['route_reason']}")
+                st.write(f"Rewrite changed: {trace['rewrite_changed']}")
+                st.write(f"Rewritten query: {trace['rewritten_query']}")
+                st.write(f"Evidence: {trace['evidence_status']}")
+                st.write(f"Evidence reason: {trace['evidence_reason']}")
         for source in result["sources"]:
             with st.expander(f"[{source['id']}] {source['title']} ({source['source']})"):
                 st.write(source["content"])

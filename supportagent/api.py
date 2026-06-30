@@ -28,9 +28,19 @@ class Source(BaseModel):
     distance: float
 
 
+class AgentTrace(BaseModel):
+    route_source: str
+    route_reason: str
+    rewrite_changed: bool
+    rewritten_query: str
+    evidence_status: str
+    evidence_reason: str
+
+
 class AskResponse(BaseModel):
     answer: str
     sources: list[Source]
+    trace: AgentTrace
 
 
 @app.post("/ask", response_model=AskResponse)
@@ -50,4 +60,16 @@ def ask(request: AskRequest) -> AskResponse:
         )
         for i, chunk in enumerate(result.chunks, start=1)
     ]
-    return AskResponse(answer=result.answer, sources=sources)
+    trace = AgentTrace(
+        route_source=result.route.source,
+        route_reason=result.route.reason,
+        rewrite_changed=result.rewrite.changed,
+        rewritten_query=result.rewrite.rewritten_query,
+        evidence_status=result.evidence.status,
+        evidence_reason=result.evidence.reason,
+    )
+    return AskResponse(
+        answer=result.answer,
+        sources=sources,
+        trace=trace,
+    )
