@@ -3,10 +3,8 @@ from typing import Literal
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-from .answer import generate_answer
+from .agent.workflow import answer_with_agent
 from dotenv import load_dotenv
-from .retrieval import retrieve
-
 load_dotenv()
 
 app = FastAPI(title="SupportAgent")
@@ -33,8 +31,10 @@ class AskResponse(BaseModel):
 
 @app.post("/ask", response_model=AskResponse)
 def ask(request: AskRequest) -> AskResponse:
-    chunks = retrieve(request.question, source_filter=request.source)
-    answer = generate_answer(request.question, chunks)
+    result = answer_with_agent(
+        request.question,
+        source_filter=request.source,
+    )
     sources = [
         Source(
             id=i,
@@ -44,6 +44,6 @@ def ask(request: AskRequest) -> AskResponse:
             content=chunk["content"],
             distance=chunk["distance"],
         )
-        for i, chunk in enumerate(chunks, start=1)
+        for i, chunk in enumerate(result.chunks, start=1)
     ]
-    return AskResponse(answer=answer, sources=sources)
+    return AskResponse(answer=result.answer, sources=sources)

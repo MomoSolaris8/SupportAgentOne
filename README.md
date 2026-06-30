@@ -126,6 +126,40 @@ generates a German answer with citations (`[1]`, `[2]`, ...), and returns the
 cited sources. If the retrieved context doesn't support an answer, it returns
 a fixed controlled-refusal message instead.
 
+### Agent workflow
+The original MVP used a deterministic RAG pipeline:
+
+  ```text
+  question -> retrieve -> generate_answer
+  ```
+
+  The current version adds a minimal agent orchestration layer:
+
+  ```text
+  question
+    -> route_question
+    -> rewrite_query
+    -> retrieve
+    -> check_evidence
+    -> generate_answer or controlled refusal
+  ```
+
+  **`route_question()`** decides whether the question should search Confluence,
+  Jira, or both sources. The current implementation is rule-based and intentionally
+  deterministic, so it is easy to test and debug.
+
+  **`rewrite_query()`** expands user questions with insurance-domain terminology before retrieval. The rewritten query is used only for
+  retrieval; answer generation still receives the original user question.
+
+  **`check_evidence()`** validates the retrieved chunks before answer generation. If
+  no chunks are retrieved, the workflow returns the controlled refusal text without
+  calling the chat model.
+
+  The FastAPI endpoint calls **`answer_with_agent()`**  instead of directly calling
+  retrieval and answer generation. This keeps the API layer thin and leaves room
+  for future agent steps such as query rewriting, second-pass retrieval, stronger
+  evidence checks, or a LangGraph workflow.
+
 ### Evaluation
 
 ```bash
