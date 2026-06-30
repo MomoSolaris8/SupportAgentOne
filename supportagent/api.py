@@ -1,14 +1,18 @@
 from typing import Literal
 
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from pydantic import BaseModel
 
 from .agent.workflow import answer_with_agent
-from dotenv import load_dotenv
-load_dotenv()
+from .logging_config import configure_logging
 
+load_dotenv()
+configure_logging()
 app = FastAPI(title="SupportAgent")
-#app = FastAPI(title="SupportAgent", debug=True)
+
+
+# app = FastAPI(title="SupportAgent", debug=True)
 
 class AskRequest(BaseModel):
     question: str
