@@ -2,3 +2,4 @@ fastapi
 openai
 psycopg[binary]
 pgvector
+langfuse
