@@ -11,7 +11,7 @@ graph TD
     User[👤 Browser]
 
     subgraph SC["🌐 Frontend"]
-        Dashboard[dashboard.py<br/>Streamlit]
+        Dashboard[frontend<br/>Next.js]
     end
 
     subgraph VC["⚡ Backend API"]
@@ -66,8 +66,8 @@ graph TD
 - `api.py` is a thin controller: it just calls `retrieve()` then `generate_answer()`.
 - Two external calls go to DashScope: one to embed the question, one to generate
   the final answer from the retrieved chunks.
-- The Streamlit dashboard calls the Vercel API server-to-server (`requests.post`),
-  so no CORS configuration is needed.
+- The Next.js frontend proxies browser requests through `/api/ask` to the FastAPI
+  backend, so no JWT or browser-side CORS setup is required for local development.
 
 ## Screenshots
 
@@ -101,6 +101,139 @@ Copy `.env.example` to `.env` and fill in:
 - `EMBEDDING_API_KEY` - Alibaba Cloud Model Studio (DashScope) API key, used via its
   OpenAI-compatible endpoint (`EMBEDDING_BASE_URL`) for both embeddings and chat (`CHAT_MODEL`)
 - `DATABASE_URL` - points at the pgvector container started by `docker compose up`
+- `AUTH_SESSION_TTL_DAYS`, `AUTH_COOKIE_SECURE` - local email/password session
+  settings. Keep `AUTH_COOKIE_SECURE=false` for plain HTTP local development and
+  set it to `true` when serving behind HTTPS.
+
+## Backend layout
+
+The backend follows a small service-oriented layout inspired by larger agent
+platforms:
+
+- `supportagent/api/` - FastAPI app, route registration, request/response schemas
+- `supportagent/auth/` - local email/password auth, session cookies, user/session tables
+- `supportagent/memory/` - short-memory and long-memory schemas, SQL store, service API
+- `supportagent/rag/` - ingestion, chunking, embeddings, pgvector storage, retrieval
+- `supportagent/agent/` - LangGraph workflow, routing, query rewrite, evidence checks
+- `supportagent/integrations/` - external service clients such as Atlassian and Langfuse
+- `supportagent/core/` - shared domain models, answer generation, logging setup
+
+## One-command local startup
+
+After Docker Desktop is running and `.env` is configured:
+
+```bash
+python scripts/start.py
+```
+
+Use `python3 scripts/start.py` if your system does not provide `python`.
+
+The script installs missing frontend dependencies, starts the local pgvector
+Postgres container, creates the memory tables for short-memory and long-memory,
+then starts FastAPI at `http://127.0.0.1:8000` and Next.js at
+`http://localhost:3000`. Press `Ctrl+C` to stop the frontend and backend;
+Postgres remains running.
+
+## Testing and CI
+
+Backend tests are regular `pytest` tests with assertions and monkeypatching for
+agent dependencies. Frontend checks use TypeScript and a production Next.js
+build.
+
+```bash
+python -m pip install -e ".[dev]"
+pytest
+
+cd src/frontend
+npm ci
+npm run typecheck
+npm run build
+```
+
+GitHub Actions in `.github/workflows/ci.yml` runs backend compile/tests,
+frontend typecheck/build, and backend/frontend Docker image builds on pull
+requests and pushes to `main`.
+
+## Container startup
+
+For only the local database:
+
+```bash
+docker compose up -d postgres
+```
+
+For the containerized app stack:
+
+```bash
+docker compose --profile app up --build
+```
+
+The app profile builds `Dockerfile.backend` and `src/frontend/Dockerfile`,
+starts FastAPI on `http://localhost:8000`, Next.js on `http://localhost:3000`,
+and uses the same pgvector Postgres service.
+
+## Local MCP servers
+
+The project includes local, enumerable MCP server examples under
+`supportagent/mcp_servers/`. They are intended as interview-friendly reference
+servers, not default remote third-party proxies.
+
+### Microsoft Teams / Graph MCP
+
+`teams_mcp` mirrors the shape of the OmniAgent `lark_mcp` example, but maps the
+tools to Microsoft Graph instead of Feishu/Lark:
+
+- users: `batch_get_user_info`
+- calendars: `create_calendar`, `delete_calendar`, `get_calendar_info`,
+  `get_calendars_list`, `update_calendar`
+- calendar events: `create_calendar_event`,
+  `append_calendar_event_attendee`, `get_calendar_event`,
+  `update_calendar_event`, `delete_calendar_event`
+- OneDrive documents/folders: `create_document`, `get_document`,
+  `create_folder`, `list_folder_files`
+- Teams messages: `create_message`
+
+Set `MS_GRAPH_ACCESS_TOKEN` or pass `access_token` to each tool. For a personal
+account, an email such as `yuheydemann@outlook.de` can be used as `user_id` for
+user/calendar/OneDrive tools. Sending Teams messages still requires a real
+Microsoft Graph `chat_id`.
+
+```bash
+python -m supportagent.mcp_servers.teams_mcp --transport stdio
+python -m supportagent.mcp_servers.teams_mcp --transport sse --host 127.0.0.1 --port 8010
+```
+
+### Google Weather MCP
+
+`weather_mcp` exposes `get_weather(location | latitude/longitude)`. It uses
+Google Geocoding when only a text location is provided, then calls Google
+Weather for current conditions and daily forecast.
+
+Set `GOOGLE_WEATHER_API_KEY` or `GOOGLE_MAPS_API_KEY`, or pass `api_key` to the
+tool.
+
+```bash
+python -m supportagent.mcp_servers.weather_mcp --transport stdio
+python -m supportagent.mcp_servers.weather_mcp --transport sse --host 127.0.0.1 --port 8011
+```
+
+Unlike the OmniAgent sample remote SSE entries, these servers do not auto-route
+traffic through ModelScope or any unknown external MCP host. For production,
+put a gateway/audit layer in front of Graph and Weather credentials before
+letting users call these tools.
+
+The chat endpoint also has a dynamic MCP path. On each `/ask`, the backend can
+spawn the local MCP servers over stdio, call `list_tools`, expose allowed tools
+to the chat model, execute model-selected `tool_calls` through `call_tool`, and
+show those calls in the Agent trace. Write/action tools are not exposed to the
+automatic agent unless `MCP_ALLOW_WRITE_TOOLS=true`.
+
+```text
+MCP config -> MultiServerMCPClient -> list_tools -> StructuredTool -> tool_calls
+```
+
+Set `MCP_DYNAMIC_TOOLS_ENABLED=false` to disable this automatic route and keep
+only the manual MCP debug panel.
 
 ## Pipeline
 
@@ -109,10 +242,10 @@ Copy `.env.example` to `.env` and fill in:
 python -m supportagent.seed
 
 # 2. Pull real Confluence pages (tagged "insurance-kb") + Jira issues, normalize to Documents
-python -m supportagent.ingest
+python -m supportagent.rag.ingest
 
 # 3. Chunk -> embed -> store in pgvector
-python -m supportagent.index
+python -m supportagent.rag.index
 ```
 
 ## RAG Answer API
@@ -120,6 +253,11 @@ python -m supportagent.index
 ```bash
 uvicorn supportagent.api:app --reload
 ```
+
+Register or sign in through the frontend first. The backend stores an
+HTTP-only session cookie and resolves `user_id` server-side, so short memory is
+scoped by `thread_id` and long memory is scoped by the authenticated user rather
+than a frontend-supplied identifier.
 
 `POST /ask` with `{"question": "..."}` retrieves relevant chunks from pgvector,
 generates a German answer with citations (`[1]`, `[2]`, ...), and returns the
@@ -171,17 +309,19 @@ single-source retrieval, multi-source synthesis, conflicting sources,
 terminology robustness, and controlled refusal, and prints a pass/fail
 report against the live pipeline.
 
-## Dashboard
+## Frontend
 
 ```bash
-streamlit run supportagent/dashboard.py
+cd src/frontend
+npm install
+npm run dev
 ```
 
-A simple chat UI on top of `/ask` (run `uvicorn` first, see above): ask a
-German question, filter by source (Confluence/Jira/all) in the sidebar, and
-expand each cited source to preview its content and open the original
-Confluence page or Jira issue. Set `API_BASE_URL` if the API isn't on
-`http://localhost:8000`.
+A Next.js chat UI on top of `/ask` (run `uvicorn` first, see above): ask a
+German question, filter by source (Confluence/Jira/all), and expand each cited
+source to preview its content and open the original Confluence page or Jira
+issue. Set `BACKEND_API_URL` in `src/frontend/.env.local` if the FastAPI backend
+isn't on `http://localhost:8000`.
 
 ### PDF data prep
 
@@ -197,6 +337,8 @@ module docstring for the dry-run / save workflow.
 - `seed_content.py`, `seed.py` - sample data + script to create it in Confluence/Jira
 - `ingest.py` - pulls real data back out and normalizes it to `Document`
 - `chunking.py`, `embeddings.py`, `vector_store.py`, `index.py` - chunk/embed/store pipeline
+- `src/backend/supportagent` - FastAPI, LangGraph workflow, ingestion, retrieval, and indexing code
+- `src/frontend` - Next.js frontend that proxies `/api/ask` to FastAPI
 
 ## Tests
 
