@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 
 from .adf_utils import text_to_adf
-from .atlassian_client import AtlassianClient
+from supportagent.integrations.atlassian_client import AtlassianClient
 from dotenv import load_dotenv
 from .seed_content import CONFLUENCE_PAGES, JIRA_ISSUES, PROJECTS
 

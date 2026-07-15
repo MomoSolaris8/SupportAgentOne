@@ -1,14 +1,23 @@
 from supportagent.agent.workflow import answer_with_agent
-from supportagent.answer import REFUSAL_TEXT
+from supportagent.core.answer import REFUSAL_TEXT
+
+
+def disable_mcp_tools(monkeypatch):
+    monkeypatch.setattr(
+        "supportagent.agent.workflow.run_dynamic_mcp_agent_sync",
+        lambda *args, **kwargs: type("MCPResult", (), {"answer": None, "tool_calls": [], "error": None})(),
+    )
+
 
 def test_agent_routes_jira_question_to_jira(monkeypatch):
+    disable_mcp_tools(monkeypatch)
     captured = {}
     def fake_retrieve(question, source_filter=None):
         captured["question"] = question
         captured["source_filter"] = source_filter
         return [{"content": "fake chunk", "metadata": {}, "distance": 0.1}]
 
-    def fake_generate_answer(question, chunks):
+    def fake_generate_answer(question, chunks, short_history=None, long_memories=None, **kwargs):
         return "fake answer"
 
     monkeypatch.setattr("supportagent.agent.workflow.retrieve", fake_retrieve)
@@ -22,6 +31,7 @@ def test_agent_routes_jira_question_to_jira(monkeypatch):
     assert result.evidence.status == "sufficient"
 
 def test_agent_routes_confluence_question_to_confluence(monkeypatch):
+    disable_mcp_tools(monkeypatch)
     captured = {}
 
     def fake_retrieve(question, source_filter=None):
@@ -29,7 +39,7 @@ def test_agent_routes_confluence_question_to_confluence(monkeypatch):
         captured["source_filter"] = source_filter
         return [{"content": "fake chunk", "metadata": {}, "distance": 0.1}]
 
-    def fake_generate_answer(question, chunks):
+    def fake_generate_answer(question, chunks, short_history=None, long_memories=None, **kwargs):
         return "fake answer"
 
     monkeypatch.setattr("supportagent.agent.workflow.retrieve", fake_retrieve)
@@ -42,6 +52,7 @@ def test_agent_routes_confluence_question_to_confluence(monkeypatch):
 
 
 def test_manual_source_filter_overrides_router(monkeypatch):
+    disable_mcp_tools(monkeypatch)
     captured = {}
 
     def fake_retrieve(question, source_filter=None):
@@ -49,7 +60,7 @@ def test_manual_source_filter_overrides_router(monkeypatch):
         captured["source_filter"] = source_filter
         return [{"content": "fake chunk", "metadata": {}, "distance": 0.1}]
 
-    def fake_generate_answer(question, chunks):
+    def fake_generate_answer(question, chunks, short_history=None, long_memories=None, **kwargs):
         return "fake answer"
 
     monkeypatch.setattr("supportagent.agent.workflow.retrieve", fake_retrieve)
@@ -65,10 +76,11 @@ def test_manual_source_filter_overrides_router(monkeypatch):
 
 
 def test_agent_refuses_when_evidence_is_insufficient(monkeypatch):
+    disable_mcp_tools(monkeypatch)
     def fake_retrieve(question, source_filter=None):
         return []
 
-    def fake_generate_answer(question, chunks):
+    def fake_generate_answer(question, chunks, short_history=None, long_memories=None, **kwargs):
         raise AssertionError("generate_answer should not be called when evidence is insufficient")
 
     monkeypatch.setattr("supportagent.agent.workflow.retrieve", fake_retrieve)
@@ -82,6 +94,7 @@ def test_agent_refuses_when_evidence_is_insufficient(monkeypatch):
 
 
 def test_agent_uses_rewritten_query_for_retrieval(monkeypatch):
+    disable_mcp_tools(monkeypatch)
     captured = {}
 
     def fake_retrieve(question, source_filter=None):
@@ -89,7 +102,7 @@ def test_agent_uses_rewritten_query_for_retrieval(monkeypatch):
         captured["source_filter"] = source_filter
         return [{"content": "fake chunk", "metadata": {}, "distance": 0.1}]
 
-    def fake_generate_answer(question, chunks):
+    def fake_generate_answer(question, chunks, short_history=None, long_memories=None, **kwargs):
         captured["answer_question"] = question
         return "fake answer"
 

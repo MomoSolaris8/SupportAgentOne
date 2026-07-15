@@ -6,9 +6,17 @@
 
 # Local raw source PDFs for data prep (kept out of git, can be large)
 data/raw/
+data/uploads/
 
 # Stray lockfile from uv (PyCharm's uv integration); project uses pip + venv.
 uv.lock
+
+# Node / Next.js frontend
+node_modules/
+.next/
+src/frontend/.next/
+src/frontend/node_modules/
+src/frontend/tsconfig.tsbuildinfo
 
 ### macOS ###
 # General

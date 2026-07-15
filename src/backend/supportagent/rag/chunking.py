@@ -1,4 +1,4 @@
-from .models import Document
+from supportagent.core.models import Document
 
 
 def chunk_document(doc: Document) -> list[dict]:

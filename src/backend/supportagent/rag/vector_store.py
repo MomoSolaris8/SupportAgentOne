@@ -6,7 +6,11 @@ from pgvector.psycopg import register_vector
 
 
 def get_connection() -> psycopg.Connection:
-    conn = psycopg.connect(os.environ["DATABASE_URL"], prepare_threshold=None)
+    conn = psycopg.connect(
+        os.environ["DATABASE_URL"],
+        prepare_threshold=None,
+        connect_timeout=int(os.environ.get("DATABASE_CONNECT_TIMEOUT_SECONDS", "5")),
+    )
     conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
     conn.commit()
     register_vector(conn)

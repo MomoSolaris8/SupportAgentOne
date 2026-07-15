@@ -5,10 +5,10 @@ valid EMBEDDING_*/CHAT_MODEL credentials. Prints a pass/fail report per
 question for manual review of the generated answers.
 """
 
-from .answer import generate_answer
 from dotenv import load_dotenv
 from .eval_questions import EVAL_QUESTIONS
-from .retrieval import retrieve
+from supportagent.core.answer import generate_answer
+from supportagent.rag.retrieval import retrieve
 
 # Two key phrases from REFUSAL_TEXT, used for a lenient match since the model
 # may vary whitespace/line breaks slightly when reproducing the wording.

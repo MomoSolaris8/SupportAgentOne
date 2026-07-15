@@ -2,12 +2,12 @@ import json
 import os
 from dataclasses import asdict
 
-from .adf_utils import adf_to_text
-from .atlassian_client import AtlassianClient
 from dotenv import load_dotenv
-from .html_utils import html_to_text
-from .models import Document
-from .seed import INSURANCE_KB_LABEL
+from supportagent.adf_utils import adf_to_text
+from supportagent.core.models import Document
+from supportagent.html_utils import html_to_text
+from supportagent.integrations.atlassian_client import AtlassianClient
+from supportagent.seed import INSURANCE_KB_LABEL
 
 
 def confluence_page_to_document(page: dict, base_url: str, labels: list[str]) -> Document:

@@ -1,5 +1,5 @@
-from supportagent.chunking import chunk_document
-from supportagent.models import Document
+from supportagent.core.models import Document
+from supportagent.rag.chunking import chunk_document
 
 
 def _confluence_doc(text: str) -> Document:
