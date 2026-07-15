@@ -1,0 +1,6 @@
+{
+  "skill_id": "document_checklist",
+  "name": "Document Checklist",
+  "category": "claims",
+  "description": "Extract a checklist of documents or customer information needed for a case."
+}
