@@ -1293,7 +1293,7 @@ export default function Home() {
           <p className="panelTitle">Account</p>
           <p>{user.display_name || user.email}</p>
           <small>{user.email}</small>
-          <a className="connectButton" href={`${backendApiUrl}/auth/microsoft/start`}>
+          <a className="connectButton" href="/api/auth/microsoft/start">
             Connect Microsoft
           </a>
           <button onClick={() => void logout()} type="button">
