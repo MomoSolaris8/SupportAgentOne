@@ -72,6 +72,7 @@ type CalendarEventAction = {
   startTime: string;
   endTime: string;
   timezone: string;
+  body?: string;
 };
 
 type MicrosoftAction = CreateCalendarAction | CalendarEventAction;
@@ -763,7 +764,7 @@ export default function Home() {
                 start_time: `${action.date}T${action.startTime}:00`,
                 end_time: `${action.date}T${action.endTime}:00`,
                 timezone: action.timezone,
-                body: "Created by SupportAgent MCP."
+                body: action.body || "Created by SupportAgent MCP."
               }
             };
 
@@ -2178,6 +2179,10 @@ function parseCalendarEventAction(text: string): CalendarEventAction | null {
   } else if (lower.includes("interview")) {
     subject = "Interview";
   }
+  const detailsMatch = text.match(/(?:teilnehmer\/details|details|teilnehmer|participants|attendees)\s*[:=]\s*([^;.]+)/i);
+  const body = detailsMatch?.[1]?.trim()
+    ? `Details: ${detailsMatch[1].trim()}`
+    : undefined;
 
   return {
     type: "create_calendar_event",
@@ -2186,6 +2191,7 @@ function parseCalendarEventAction(text: string): CalendarEventAction | null {
     startTime: `${hour}:${minute}`,
     endTime: `${endHour}:${minute}`,
     timezone: "W. Europe Standard Time",
+    body,
   };
 }
 

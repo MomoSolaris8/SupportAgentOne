@@ -233,6 +233,13 @@ def _summarize_tool_result(result: str) -> str:
     return "\n".join(lines)
 
 
+def _format_mcp_error(error: BaseException) -> str:
+    if isinstance(error, BaseExceptionGroup):
+        details = "; ".join(_format_mcp_error(item) for item in error.exceptions)
+        return details or str(error)
+    return str(error)
+
+
 async def mcp_call(
     request: McpToolCallRequest,
     user: AuthUser = Depends(get_current_user),
@@ -254,15 +261,16 @@ async def mcp_call(
     try:
         result = await client.call_tool(request.server, request.tool, arguments)
     except Exception as error:
+        detail = _format_mcp_error(error)
         add_audit_log(
             user_id=user.id,
             server_name=request.server,
             tool_name=request.tool,
             status="error",
             arguments=arguments,
-            error=str(error),
+            error=detail,
         )
-        raise HTTPException(status_code=400, detail=f"MCP tool call failed: {error}") from error
+        raise HTTPException(status_code=400, detail=f"MCP tool call failed: {detail}") from error
 
     add_audit_log(
         user_id=user.id,
