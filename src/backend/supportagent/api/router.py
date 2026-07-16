@@ -20,7 +20,7 @@ from supportagent.api.skills import SkillsResponse, skills
 from supportagent.api.threads import delete_thread_message, thread_messages, threads, update_thread_message
 from supportagent.api.uploads import UploadedImageResponse, preview_image, upload_image
 from supportagent.auth.microsoft import microsoft_callback, microsoft_start
-from supportagent.auth.router import login, logout, me, register
+from supportagent.auth.router import forgot_password, login, logout, me, register, reset_password_route
 from supportagent.auth.schemas import UserPublic
 
 
@@ -29,6 +29,8 @@ def register_routes(app: FastAPI) -> None:
     app.add_api_route("/ready", readiness, methods=["GET"], tags=["Health"])
     app.add_api_route("/auth/register", register, methods=["POST"], response_model=UserPublic, tags=["Auth"])
     app.add_api_route("/auth/login", login, methods=["POST"], response_model=UserPublic, tags=["Auth"])
+    app.add_api_route("/auth/forgot-password", forgot_password, methods=["POST"], tags=["Auth"])
+    app.add_api_route("/auth/reset-password", reset_password_route, methods=["POST"], tags=["Auth"])
     app.add_api_route("/auth/me", me, methods=["GET"], response_model=UserPublic, tags=["Auth"])
     app.add_api_route("/auth/logout", logout, methods=["POST"], tags=["Auth"])
     app.add_api_route("/auth/microsoft/start", microsoft_start, methods=["GET"], tags=["Auth"])
