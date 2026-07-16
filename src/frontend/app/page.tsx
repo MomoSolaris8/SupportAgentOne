@@ -535,11 +535,7 @@ export default function Home() {
     setMcpServers(data.servers);
     setMcpPolicies(data.policies);
     if (!isMcpSelectionInitialized) {
-      setSelectedMcpServers(
-        data.servers
-          .filter((server) => server.enabled)
-          .map((server) => server.server_name)
-      );
+      setSelectedMcpServers([]);
       setIsMcpSelectionInitialized(true);
     }
   }

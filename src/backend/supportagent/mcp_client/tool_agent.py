@@ -81,6 +81,8 @@ async def run_dynamic_mcp_agent(
 ) -> MCPAgentResult:
     if not dynamic_mcp_enabled():
         return MCPAgentResult(answer=None)
+    if not enabled_mcp_servers:
+        return MCPAgentResult(answer=None)
 
     configs = local_mcp_configs(enabled_mcp_servers)
     if not configs:
