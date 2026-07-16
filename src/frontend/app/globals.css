@@ -115,6 +115,26 @@ button {
   padding: 0;
 }
 
+.authLinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.noticeText {
+  color: var(--green);
+  font-size: 13px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.resetLink {
+  color: var(--blue);
+  font-size: 13px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
 .shell {
   display: grid;
   grid-template-columns: 292px minmax(0, 1fr);

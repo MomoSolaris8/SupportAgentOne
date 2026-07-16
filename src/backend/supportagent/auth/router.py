@@ -2,9 +2,17 @@ from fastapi import APIRouter, Depends, Request, Response
 
 from .dependencies import get_current_user
 from .router_config import AUTH_COOKIE_NAME, AUTH_COOKIE_PATH
-from .schemas import AuthUser, LoginRequest, RegisterRequest, UserPublic
+from .schemas import (
+    AuthUser,
+    ForgotPasswordRequest,
+    ForgotPasswordResponse,
+    LoginRequest,
+    RegisterRequest,
+    ResetPasswordRequest,
+    UserPublic,
+)
 from .security import cookie_secure, session_ttl_days
-from .service import login_user, register_user
+from .service import login_user, register_user, request_password_reset, reset_password
 from .store import delete_session_token
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -48,6 +56,17 @@ def login(request: LoginRequest, response: Response) -> UserPublic:
     session = login_user(request)
     set_session_cookie(response, session.token)
     return public_user(session.user)
+
+
+@router.post("/forgot-password", response_model=ForgotPasswordResponse)
+def forgot_password(request: ForgotPasswordRequest) -> ForgotPasswordResponse:
+    return request_password_reset(request)
+
+
+@router.post("/reset-password")
+def reset_password_route(request: ResetPasswordRequest) -> dict[str, bool]:
+    reset_password(request)
+    return {"ok": True}
 
 
 @router.get("/me", response_model=UserPublic)

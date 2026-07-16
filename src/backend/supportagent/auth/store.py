@@ -46,6 +46,30 @@ def create_auth_schema(conn: psycopg.Connection) -> None:
         ON user_sessions (user_id, expires_at DESC)
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS password_reset_tokens (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            token_hash TEXT UNIQUE NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            expires_at TIMESTAMPTZ NOT NULL,
+            used_at TIMESTAMPTZ
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS password_reset_tokens_token_hash_idx
+        ON password_reset_tokens (token_hash)
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS password_reset_tokens_user_expires_idx
+        ON password_reset_tokens (user_id, expires_at DESC)
+        """
+    )
     conn.commit()
 
 
@@ -79,6 +103,21 @@ def get_user_by_email(conn: psycopg.Connection, email: str) -> tuple[AuthUser, s
     return user, row[3]
 
 
+def get_user_by_id(conn: psycopg.Connection, user_id: str) -> AuthUser | None:
+    row = conn.execute(
+        """
+        SELECT id, email, display_name
+        FROM users
+        WHERE id = %s
+        """,
+        (user_id,),
+        prepare=False,
+    ).fetchone()
+    if row is None:
+        return None
+    return AuthUser(id=row[0], email=row[1], display_name=row[2])
+
+
 def create_user(
     conn: psycopg.Connection,
     email: str,
@@ -108,6 +147,67 @@ def create_session(conn: psycopg.Connection, user: AuthUser) -> CreatedSession:
         (str(uuid4()), user.id, hash_session_token(token), expires_at),
     )
     return CreatedSession(token=token, expires_at=expires_at, user=user)
+
+
+def create_password_reset_record(
+    conn: psycopg.Connection,
+    user: AuthUser,
+    token_hash: str,
+    ttl_minutes: int,
+) -> None:
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=ttl_minutes)
+    conn.execute(
+        """
+        INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at)
+        VALUES (%s, %s, %s, %s)
+        """,
+        (str(uuid4()), user.id, token_hash, expires_at),
+    )
+
+
+def get_valid_password_reset_user_id(conn: psycopg.Connection, token_hash: str) -> str | None:
+    row = conn.execute(
+        """
+        SELECT user_id
+        FROM password_reset_tokens
+        WHERE token_hash = %s
+          AND used_at IS NULL
+          AND expires_at > now()
+        """,
+        (token_hash,),
+        prepare=False,
+    ).fetchone()
+    return row[0] if row else None
+
+
+def mark_password_reset_token_used(conn: psycopg.Connection, token_hash: str) -> None:
+    conn.execute(
+        """
+        UPDATE password_reset_tokens
+        SET used_at = now()
+        WHERE token_hash = %s
+        """,
+        (token_hash,),
+    )
+
+
+def update_user_password(conn: psycopg.Connection, user_id: str, password_hash: str) -> None:
+    conn.execute(
+        """
+        UPDATE users
+        SET password_hash = %s,
+            updated_at = now()
+        WHERE id = %s
+        """,
+        (password_hash, user_id),
+    )
+
+
+def delete_user_sessions(conn: psycopg.Connection, user_id: str) -> None:
+    conn.execute(
+        "DELETE FROM user_sessions WHERE user_id = %s",
+        (user_id,),
+    )
 
 
 def get_user_by_session_token(token: str) -> AuthUser | None:

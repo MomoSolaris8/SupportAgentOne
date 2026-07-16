@@ -180,6 +180,8 @@ type ChatModel = {
   default: boolean;
 };
 
+type AuthMode = "login" | "register" | "forgot" | "reset";
+
 type ChatModelsResponse = {
   models: ChatModel[];
 };
@@ -212,11 +214,14 @@ export default function Home() {
   const [runningActionId, setRunningActionId] = useState<string | null>(null);
   const [threadId, setThreadId] = useState<string | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
-  const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
+  const [resetToken, setResetToken] = useState("");
+  const [resetLink, setResetLink] = useState<string | null>(null);
   const [displayName, setDisplayName] = useState("");
   const [authError, setAuthError] = useState<string | null>(null);
+  const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [threads, setThreads] = useState<ConversationThread[]>([]);
@@ -284,6 +289,15 @@ export default function Home() {
   }, [mcpTools]);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("reset_token");
+    if (token) {
+      setResetToken(token);
+      setAuthMode("reset");
+      setAuthNotice("Choose a new password for your account.");
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+
     const existingThreadId = window.localStorage.getItem(threadStorageKey);
     if (existingThreadId) {
       setThreadId(existingThreadId);
@@ -357,20 +371,35 @@ export default function Home() {
   async function submitAuth(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setAuthError(null);
+    setAuthNotice(null);
+    setResetLink(null);
     setIsAuthLoading(true);
 
     try {
-      const response = await fetch(`/api/auth/${authMode}`, {
+      const endpoint =
+        authMode === "forgot"
+          ? "forgot-password"
+          : authMode === "reset"
+            ? "reset-password"
+            : authMode;
+      const payload =
+        authMode === "forgot"
+          ? { email: authEmail }
+          : authMode === "reset"
+            ? { token: resetToken, password: authPassword }
+            : {
+                email: authEmail,
+                password: authPassword,
+                display_name: authMode === "register" ? displayName : undefined
+              };
+
+      const response = await fetch(`/api/auth/${endpoint}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
         credentials: "include",
-        body: JSON.stringify({
-          email: authEmail,
-          password: authPassword,
-          display_name: authMode === "register" ? displayName : undefined
-        })
+        body: JSON.stringify(payload)
       });
 
       if (!response.ok) {
@@ -378,6 +407,22 @@ export default function Home() {
           | { detail?: string }
           | null;
         throw new Error(errorBody?.detail ?? `Authentication failed with ${response.status}`);
+      }
+
+      if (authMode === "forgot") {
+        const data = (await response.json()) as { message: string; reset_url?: string | null };
+        setAuthNotice(data.message);
+        setResetLink(data.reset_url ?? null);
+        return;
+      }
+
+      if (authMode === "reset") {
+        await response.json().catch(() => null);
+        setAuthPassword("");
+        setResetToken("");
+        setAuthMode("login");
+        setAuthNotice("Password updated. Sign in with your new password.");
+        return;
       }
 
       const data = (await response.json()) as AuthUser;
@@ -1069,18 +1114,28 @@ export default function Home() {
             SA
           </div>
           <p className="eyebrow">SupportAgent</p>
-          <h1>{authMode === "login" ? "Sign in" : "Create account"}</h1>
+          <h1>
+            {authMode === "login"
+              ? "Sign in"
+              : authMode === "register"
+                ? "Create account"
+                : authMode === "forgot"
+                  ? "Reset password"
+                  : "New password"}
+          </h1>
           <form className="authForm" onSubmit={submitAuth}>
-            <label>
-              Email
-              <input
-                autoComplete="email"
-                onChange={(event) => setAuthEmail(event.target.value)}
-                required
-                type="email"
-                value={authEmail}
-              />
-            </label>
+            {authMode !== "reset" ? (
+              <label>
+                Email
+                <input
+                  autoComplete="email"
+                  onChange={(event) => setAuthEmail(event.target.value)}
+                  required
+                  type="email"
+                  value={authEmail}
+                />
+              </label>
+            ) : null}
             {authMode === "register" ? (
               <label>
                 Display name
@@ -1092,32 +1147,64 @@ export default function Home() {
                 />
               </label>
             ) : null}
-            <label>
-              Password
-              <input
-                autoComplete={authMode === "login" ? "current-password" : "new-password"}
-                minLength={authMode === "register" ? 8 : 1}
-                onChange={(event) => setAuthPassword(event.target.value)}
-                required
-                type="password"
-                value={authPassword}
-              />
-            </label>
+            {authMode !== "forgot" ? (
+              <label>
+                Password
+                <input
+                  autoComplete={authMode === "login" ? "current-password" : "new-password"}
+                  minLength={authMode === "login" ? 1 : 8}
+                  onChange={(event) => setAuthPassword(event.target.value)}
+                  required
+                  type="password"
+                  value={authPassword}
+                />
+              </label>
+            ) : null}
+            {authNotice ? <p className="noticeText">{authNotice}</p> : null}
+            {resetLink ? (
+              <a className="resetLink" href={resetLink}>
+                Open password reset link
+              </a>
+            ) : null}
             {authError ? <p className="errorText">{authError}</p> : null}
             <button disabled={isAuthLoading} type="submit">
-              {authMode === "login" ? "Sign in" : "Register"}
+              {authMode === "login"
+                ? "Sign in"
+                : authMode === "register"
+                  ? "Register"
+                  : authMode === "forgot"
+                    ? "Send reset link"
+                    : "Update password"}
             </button>
           </form>
-          <button
-            className="textButton"
-            onClick={() => {
-              setAuthError(null);
-              setAuthMode(authMode === "login" ? "register" : "login");
-            }}
-            type="button"
-          >
-            {authMode === "login" ? "Create a local account" : "Use existing account"}
-          </button>
+          <div className="authLinks">
+            {authMode === "login" ? (
+              <button
+                className="textButton"
+                onClick={() => {
+                  setAuthError(null);
+                  setAuthNotice(null);
+                  setAuthMode("forgot");
+                }}
+                type="button"
+              >
+                Forgot password?
+              </button>
+            ) : null}
+            <button
+              className="textButton"
+              onClick={() => {
+                setAuthError(null);
+                setAuthNotice(null);
+                setResetLink(null);
+                setAuthPassword("");
+                setAuthMode(authMode === "register" ? "login" : authMode === "login" ? "register" : "login");
+              }}
+              type="button"
+            >
+              {authMode === "login" ? "Create a local account" : "Use existing account"}
+            </button>
+          </div>
         </section>
       </main>
     );
