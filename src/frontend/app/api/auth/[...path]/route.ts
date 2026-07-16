@@ -22,6 +22,7 @@ async function proxyAuth(request: Request, context: RouteContext) {
         Cookie: request.headers.get("cookie") ?? ""
       },
       body,
+      redirect: "manual",
       signal: AbortSignal.timeout(requestTimeoutMs)
     });
   } catch (error) {
@@ -34,6 +35,11 @@ async function proxyAuth(request: Request, context: RouteContext) {
       { detail: message },
       { status: error instanceof Error && error.name === "TimeoutError" ? 504 : 502 }
     );
+  }
+
+  const location = response.headers.get("location");
+  if (location && response.status >= 300 && response.status < 400) {
+    return NextResponse.redirect(location, response.status);
   }
 
   const responseBody = await response.text();
