@@ -1,6 +1,16 @@
 from fastapi import FastAPI
 
 from supportagent.api.ask import ask
+from supportagent.api.claims import (
+    approve_action_route,
+    create_claim_document_route,
+    create_claim_route,
+    create_proposed_action_route,
+    get_claim_route,
+    list_claims_route,
+    reject_action_route,
+    review_claim_route,
+)
 from supportagent.api.health import health, readiness
 from supportagent.api.mcp import (
     McpAuditResponse,
@@ -22,6 +32,14 @@ from supportagent.api.uploads import UploadedImageResponse, preview_image, uploa
 from supportagent.auth.microsoft import microsoft_callback, microsoft_start
 from supportagent.auth.router import forgot_password, login, logout, me, register, reset_password_route
 from supportagent.auth.schemas import UserPublic
+from supportagent.claims.schemas import (
+    Claim,
+    ClaimDetail,
+    ClaimDocument,
+    ClaimReviewResponse,
+    ClaimsResponse,
+    ProposedAction,
+)
 
 
 def register_routes(app: FastAPI) -> None:
@@ -36,6 +54,29 @@ def register_routes(app: FastAPI) -> None:
     app.add_api_route("/auth/microsoft/start", microsoft_start, methods=["GET"], tags=["Auth"])
     app.add_api_route("/auth/microsoft/callback", microsoft_callback, methods=["GET"], tags=["Auth"])
     app.add_api_route("/ask", ask, methods=["POST"], response_model=AskResponse, tags=["Ask"])
+    app.add_api_route("/claims", create_claim_route, methods=["POST"], response_model=Claim, tags=["Claims"])
+    app.add_api_route("/claims", list_claims_route, methods=["GET"], response_model=ClaimsResponse, tags=["Claims"])
+    app.add_api_route("/claims/{claim_id}", get_claim_route, methods=["GET"], response_model=ClaimDetail, tags=["Claims"])
+    app.add_api_route(
+        "/claims/{claim_id}/documents", create_claim_document_route,
+        methods=["POST"], response_model=ClaimDocument, tags=["Claims"],
+    )
+    app.add_api_route(
+        "/claims/{claim_id}/actions", create_proposed_action_route,
+        methods=["POST"], response_model=ProposedAction, tags=["Claims"],
+    )
+    app.add_api_route(
+        "/claims/{claim_id}/review", review_claim_route,
+        methods=["POST"], response_model=ClaimReviewResponse, tags=["Claims"],
+    )
+    app.add_api_route(
+        "/claims/{claim_id}/actions/{action_id}/approve", approve_action_route,
+        methods=["POST"], response_model=ProposedAction, tags=["Claims"],
+    )
+    app.add_api_route(
+        "/claims/{claim_id}/actions/{action_id}/reject", reject_action_route,
+        methods=["POST"], response_model=ProposedAction, tags=["Claims"],
+    )
     app.add_api_route("/uploads/image", upload_image, methods=["POST"], response_model=UploadedImageResponse, tags=["Uploads"])
     app.add_api_route("/uploads/image/{image_id}", preview_image, methods=["GET"], tags=["Uploads"])
     app.add_api_route("/models", chat_models, methods=["GET"], response_model=ChatModelsResponse, tags=["Models"])

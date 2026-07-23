@@ -7,7 +7,11 @@ from langgraph.graph import END, START, StateGraph
 from supportagent.agent.evidence import EvidenceDecision, check_evidence
 from supportagent.agent.query_rewrite import QueryRewrite, rewrite_query
 from supportagent.agent.router import RouteDecision, route_question
-from supportagent.core.answer import REFUSAL_TEXT, generate_answer
+from supportagent.core.answer import (
+    REFUSAL_TEXT,
+    answer_reports_insufficient_evidence,
+    generate_answer,
+)
 from supportagent.integrations.langfuse_client import get_langfuse_client
 from supportagent.llm import resolve_chat_model
 from supportagent.memory import ChatMessage, LongMemory, load_memory_context, save_memory_turn
@@ -248,6 +252,14 @@ def generate_answer_node(state: AgentState) -> AgentState:
         model=state.get("model"),
     )
     logger.info("agent_answer_generated chunk_count=%d", len(chunks))
+    if answer_reports_insufficient_evidence(answer):
+        return {
+            "answer": answer,
+            "evidence": EvidenceDecision(
+                status="insufficient",
+                reason="Retrieved candidates did not support a reliable answer.",
+            ),
+        }
     return {"answer": answer}
 
 

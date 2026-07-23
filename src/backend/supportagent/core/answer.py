@@ -4,59 +4,12 @@ from openai import OpenAI
 
 from supportagent.llm import resolve_chat_model
 from supportagent.memory.schemas import ChatMessage, LongMemory
-
-# Fixed fallback wording from architecture-proposal-v0.1.de.md, section 6.4.
-REFUSAL_TEXT = (
-    "Ich kann diese Frage anhand der verfügbaren Quellen nicht verlässlich beantworten.\n"
-    "Bitte prüfen Sie die offiziellen Versicherungsbedingungen oder eskalieren Sie an das "
-    "zuständige Fachteam."
+from supportagent.prompts.insurance_knowledge import (
+    FEW_SHOT_MESSAGES,
+    IMAGE_ONLY_SYSTEM_PROMPT,
+    REFUSAL_TEXT,
+    SYSTEM_PROMPT,
 )
-
-SYSTEM_PROMPT = f"""Du bist ein Assistent für ein internes Versicherungs-Wissensportal.
-
-Beantworte fachliche Versicherungsfragen ausschließlich auf Basis der nummerierten \
-Quellenausschnitte, die der Nutzer dir gibt. Antworte auf Deutsch.
-
-Wenn der Nutzer ein Bild hochgeladen hat und nach sichtbaren Bildinhalten fragt, darfst du \
-die Bildbeobachtungen verwenden. Verwende Bildbeobachtungen aber nicht als Beleg fuer \
-Deckung, Leistung, Haftung, Betrug, Schadenhoehe oder finale Regulierung.
-
-Zitiere die verwendeten Quellen mit ihrer Nummer in eckigen Klammern, z. B. [1] oder [2][3].
-
-Halte das Antwortformat stabil:
-
-1. Beginne mit genau einem kurzen Einleitungssatz, der die Frage direkt beantwortet.
-2. Wenn mehrere Punkte genannt werden, verwende danach eine Markdown-Bullet-Liste.
-3. Jeder Bullet muss dieses Format haben:
-   - **Name**: Beschreibung mit Quellenangabe [1].
-4. Verwende keine Tabellen und keine frei wechselnden Zwischenüberschriften.
-5. Erkläre keine normalisierten Tippfehler, wenn die normalisierte Frage eindeutig ist.
-
-Erfinde keine Policen-, Leistungs- oder Prozessdetails, die nicht in den Quellen stehen.
-
-Bevorzuge bei widersprüchlichen Quellen freigegebene Confluence-Inhalte gegenüber \
-Jira-Tickets und weise darauf hin, wenn ein Jira-Ticket auf eine mögliche \
-Dokumentationslücke hindeutet.
-
-Wenn die Quellen nicht ausreichen, um die Frage verlässlich zu beantworten, antworte exakt \
-mit folgendem Text und sonst nichts:
-
-{REFUSAL_TEXT}
-
-Gib niemals beides aus. Entscheide dich entweder für eine vollständige Antwort mit Zitaten \
-oder für den Ablehnungstext, nie für beides zusammen."""
-
-IMAGE_ONLY_SYSTEM_PROMPT = """Du bist ein Assistent fuer ein internes Versicherungs-Wissensportal.
-
-Der Nutzer hat ein Bild hochgeladen, aber es wurden keine verlaesslichen Wissensquellen aus
-Confluence oder Jira gefunden. Antworte deshalb nur auf Basis der Bildbeobachtung.
-
-Regeln:
-1. Antworte auf Deutsch.
-2. Beschreibe nur sichtbare oder extrahierte Inhalte aus der Bildbeobachtung.
-3. Triff keine Aussage zu Deckung, Leistung, Haftung, Betrug, Schadenhoehe oder finaler Regulierung.
-4. Wenn keine Bildanalyse verfuegbar ist, sage das klar.
-5. Wenn der Nutzer eine fachliche Versicherungsfrage stellt, erklaere kurz, dass dafuer zusaetzliche Quellen oder Fachpruefung noetig sind."""
 
 
 IMAGE_FOCUSED_TERMS = (
@@ -97,6 +50,22 @@ def format_long_memories(memories: list[LongMemory]) -> str:
     return "\n".join(f"- {memory.content}" for memory in memories)
 
 
+def enforce_answer_contract(answer: str) -> str:
+    """Keep the model from mixing a sourced answer with the fixed refusal."""
+    normalized = answer.strip()
+    if "Ich kann diese Frage anhand der verfügbaren Quellen nicht verlässlich beantworten." in normalized:
+        return REFUSAL_TEXT
+    return normalized
+
+
+def answer_reports_insufficient_evidence(answer: str) -> bool:
+    normalized = answer.casefold()
+    return answer == REFUSAL_TEXT or (
+        "in den freigegebenen quellen" in normalized
+        and "nicht ausdrücklich definiert" in normalized
+    )
+
+
 def generate_answer(
     question: str,
     chunks: list[dict],
@@ -132,7 +101,7 @@ def generate_answer(
             ],
             temperature=0,
         )
-        return response.choices[0].message.content
+        return enforce_answer_contract(response.choices[0].message.content)
 
     context = "\n\n".join(
         f"[{i}] ({chunk['metadata']['source']}) {chunk['metadata']['title']}\n{chunk['content']}"
@@ -161,6 +130,7 @@ def generate_answer(
         model=chat_model,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
+            *FEW_SHOT_MESSAGES,
             {
                 "role": "user",
                 "content": f"{memory_context}\n\n{skill_context}\n\n{image_context}\n\nFrage: {question}\n\nQuellen:\n{context}",
@@ -168,4 +138,4 @@ def generate_answer(
         ],
         temperature=0,
     )
-    return response.choices[0].message.content
+    return enforce_answer_contract(response.choices[0].message.content)

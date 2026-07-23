@@ -154,6 +154,20 @@ GitHub Actions in `.github/workflows/ci.yml` runs backend compile/tests,
 frontend typecheck/build, and backend/frontend Docker image builds on pull
 requests and pushes to `main`.
 
+### Synthetic claim-review data
+
+The repository includes source-backed document rules, synthetic claim fixtures
+under `data/synthetic_claims.json`, and deterministic review cases under
+`evals/claim_review.jsonl`. After registering a local user, seed the fixtures
+explicitly with:
+
+```bash
+python scripts/seed_claim_demo.py --owner-email you@example.com --yes
+```
+
+The script refuses to create data without `--yes` and never reassigns an
+existing synthetic claim to another user.
+
 ## Container startup
 
 For only the local database:

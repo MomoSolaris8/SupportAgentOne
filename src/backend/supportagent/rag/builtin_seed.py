@@ -10,6 +10,16 @@ from .embeddings import embed_texts, get_embedding_client
 from .vector_store import create_schema, get_connection, upsert_chunk
 
 
+PROJECT_PRODUCT_LINES = {
+    "hausrat": "household",
+    "wohngebaeude": "residential_building",
+    "kfz": "vehicle",
+    "haftpflicht": "liability",
+    "rechtsschutz": "legal_expense",
+    "schadenbearbeitung": "all",
+}
+
+
 def stable_source_id(prefix: str, value: str) -> str:
     digest = hashlib.sha1(value.encode("utf-8")).hexdigest()[:12]
     return f"{prefix}-{digest}"
@@ -29,6 +39,13 @@ def builtin_documents() -> list[Document]:
                     "space_id": "seed",
                     "labels": page.get("labels", []),
                     "version": 1,
+                    "approval_status": "approved",
+                    "document_type": "claims_guideline" if "claims" in page.get("labels", []) else "product_guideline",
+                    "product_line": PROJECT_PRODUCT_LINES.get(page.get("project", ""), "all"),
+                    "jurisdiction": "DE",
+                    "effective_from": "2026-01-01",
+                    "effective_to": None,
+                    "owner_team": "Insurance Knowledge Management",
                     "updated_at": "2026-07-16",
                     "url": f"seed://insurance-kb/{stable_source_id('page', title)}",
                 },
@@ -49,6 +66,10 @@ def builtin_documents() -> list[Document]:
                     "project_key": "DEMO",
                     "issue_type": issue.get("issue_type", "Task"),
                     "status": "Seeded",
+                    "approval_status": "unapproved",
+                    "document_type": "documentation_issue",
+                    "product_line": PROJECT_PRODUCT_LINES.get(issue.get("project", ""), "all"),
+                    "jurisdiction": "DE",
                     "labels": issue.get("labels", []),
                     "updated_at": "2026-07-16",
                     "url": f"seed://insurance-jira/{stable_source_id('issue', title)}",

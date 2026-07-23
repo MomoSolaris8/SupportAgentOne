@@ -1,0 +1,194 @@
+[
+  {
+    "id": "CLM-DEMO-001",
+    "policy_id": "POL-WB-2026-001",
+    "product_line": "residential_building",
+    "policy_version": "2026.1",
+    "jurisdiction": "DE",
+    "customer_reference": "SYNTH-CUSTOMER-001",
+    "claim_type": "water_damage",
+    "documents": [
+      {"document_type": "claim_form", "status": "COMPLETED"},
+      {"document_type": "damage_photo", "status": "COMPLETED"},
+      {"document_type": "damage_cause_report", "status": "COMPLETED"},
+      {"document_type": "repair_invoice", "status": "COMPLETED"}
+    ],
+    "expected": {"missing_required": [], "jira_proposal": false}
+  },
+  {
+    "id": "CLM-DEMO-002",
+    "policy_id": "POL-WB-2026-002",
+    "product_line": "residential_building",
+    "policy_version": "2026.1",
+    "jurisdiction": "DE",
+    "customer_reference": "SYNTH-CUSTOMER-002",
+    "claim_type": "water_damage",
+    "documents": [
+      {"document_type": "claim_form", "status": "COMPLETED"},
+      {"document_type": "damage_photo", "status": "COMPLETED"}
+    ],
+    "expected": {
+      "missing_required": ["damage_cause_report", "repair_invoice"],
+      "jira_proposal": true
+    }
+  },
+  {
+    "id": "CLM-DEMO-003",
+    "policy_id": "POL-WB-2026-003",
+    "product_line": "residential_building",
+    "policy_version": "2026.1",
+    "jurisdiction": "DE",
+    "customer_reference": "SYNTH-CUSTOMER-003",
+    "claim_type": "water_damage",
+    "documents": [
+      {"document_type": "claim_form", "status": "COMPLETED"},
+      {"document_type": "damage_photo", "status": "COMPLETED"},
+      {"document_type": "damage_cause_report", "status": "COMPLETED"},
+      {"document_type": "repair_invoice", "status": "COMPLETED"}
+    ],
+    "expected": {
+      "missing_required": [],
+      "optional_absent": ["repair_estimate"],
+      "jira_proposal": false
+    }
+  },
+  {
+    "id": "CLM-DEMO-004",
+    "policy_id": "POL-WB-2026-004",
+    "product_line": "residential_building",
+    "policy_version": "2026.1",
+    "jurisdiction": "DE",
+    "customer_reference": "SYNTH-CUSTOMER-004",
+    "claim_type": "water_damage",
+    "documents": [
+      {"document_type": "claim_form", "status": "COMPLETED"},
+      {"document_type": "damage_photo", "status": "COMPLETED"},
+      {"document_type": "damage_cause_report", "status": "PENDING"},
+      {"document_type": "repair_invoice", "status": "COMPLETED"}
+    ],
+    "expected": {"missing_required": ["damage_cause_report"], "jira_proposal": true}
+  },
+  {
+    "id": "CLM-DEMO-005",
+    "policy_id": "POL-HH-2026-001",
+    "product_line": "household",
+    "policy_version": "2026.1",
+    "jurisdiction": "DE",
+    "customer_reference": "SYNTH-CUSTOMER-005",
+    "claim_type": "theft",
+    "documents": [
+      {"document_type": "claim_form", "status": "COMPLETED"},
+      {"document_type": "damage_photo", "status": "COMPLETED"},
+      {"document_type": "police_report", "status": "COMPLETED"}
+    ],
+    "expected": {"missing_required": [], "jira_proposal": false}
+  },
+  {
+    "id": "CLM-DEMO-006",
+    "policy_id": "POL-HH-2026-002",
+    "product_line": "household",
+    "policy_version": "2026.1",
+    "jurisdiction": "DE",
+    "customer_reference": "SYNTH-CUSTOMER-006",
+    "claim_type": "theft",
+    "documents": [
+      {"document_type": "claim_form", "status": "COMPLETED"},
+      {"document_type": "police_report", "status": "COMPLETED"}
+    ],
+    "expected": {"missing_required": ["damage_photo"], "jira_proposal": true}
+  },
+  {
+    "id": "CLM-DEMO-007",
+    "policy_id": "POL-KFZ-2026-001",
+    "product_line": "vehicle",
+    "policy_version": "2026.1",
+    "jurisdiction": "DE",
+    "customer_reference": "SYNTH-CUSTOMER-007",
+    "claim_type": "vehicle_damage",
+    "documents": [
+      {"document_type": "claim_form", "status": "COMPLETED"},
+      {"document_type": "damage_photo", "status": "COMPLETED"},
+      {"document_type": "accident_report", "status": "COMPLETED"},
+      {"document_type": "repair_assessment", "status": "COMPLETED"}
+    ],
+    "expected": {"missing_required": [], "jira_proposal": false}
+  },
+  {
+    "id": "CLM-DEMO-008",
+    "policy_id": "POL-KFZ-2026-002",
+    "product_line": "vehicle",
+    "policy_version": "2026.1",
+    "jurisdiction": "DE",
+    "customer_reference": "SYNTH-CUSTOMER-008",
+    "claim_type": "vehicle_damage",
+    "documents": [
+      {"document_type": "claim_form", "status": "COMPLETED"},
+      {"document_type": "damage_photo", "status": "COMPLETED"},
+      {"document_type": "repair_assessment", "status": "COMPLETED"}
+    ],
+    "expected": {"missing_required": ["accident_report"], "jira_proposal": true}
+  },
+  {
+    "id": "CLM-DEMO-009",
+    "policy_id": "POL-KFZ-2026-003",
+    "product_line": "vehicle",
+    "policy_version": "2026.1",
+    "jurisdiction": "DE",
+    "customer_reference": "SYNTH-CUSTOMER-009",
+    "claim_type": "vehicle_damage",
+    "documents": [
+      {"document_type": "claim_form", "status": "COMPLETED"},
+      {"document_type": "damage_photo", "status": "COMPLETED"},
+      {"document_type": "accident_report", "status": "COMPLETED"},
+      {"document_type": "repair_assessment", "status": "COMPLETED"}
+    ],
+    "expected": {
+      "missing_required": [],
+      "conditional_absent": ["police_report"],
+      "jira_proposal": false
+    }
+  },
+  {
+    "id": "CLM-DEMO-010",
+    "policy_id": "POL-GEN-2026-001",
+    "product_line": "liability",
+    "policy_version": "2026.1",
+    "jurisdiction": "DE",
+    "customer_reference": "SYNTH-CUSTOMER-010",
+    "claim_type": "other",
+    "documents": [
+      {"document_type": "claim_form", "status": "COMPLETED"},
+      {"document_type": "damage_photo", "status": "COMPLETED"}
+    ],
+    "expected": {"missing_required": [], "jira_proposal": false}
+  },
+  {
+    "id": "CLM-DEMO-011",
+    "policy_id": "POL-GEN-2026-002",
+    "product_line": "liability",
+    "policy_version": "2026.1",
+    "jurisdiction": "DE",
+    "customer_reference": "SYNTH-CUSTOMER-011",
+    "claim_type": "other",
+    "documents": [
+      {"document_type": "damage_photo", "status": "COMPLETED"}
+    ],
+    "expected": {"missing_required": ["claim_form"], "jira_proposal": true}
+  },
+  {
+    "id": "CLM-DEMO-012",
+    "policy_id": "POL-WB-2026-012",
+    "product_line": "residential_building",
+    "policy_version": "2026.1",
+    "jurisdiction": "DE",
+    "customer_reference": "SYNTH-CUSTOMER-012",
+    "claim_type": "water_damage",
+    "documents": [
+      {"document_type": "repair_estimate", "status": "COMPLETED"}
+    ],
+    "expected": {
+      "missing_required": ["claim_form", "damage_cause_report", "damage_photo", "repair_invoice"],
+      "jira_proposal": true
+    }
+  }
+]

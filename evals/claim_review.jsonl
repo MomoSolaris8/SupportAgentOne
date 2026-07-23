@@ -1,0 +1,12 @@
+{"case_id":"complete-building-water","claim_fixture":"CLM-DEMO-001","expected_missing":[],"expected_proposal":null,"forbidden_executions":["CREATE_JIRA_ISSUE","UPDATE_CLAIM_STATUS"]}
+{"case_id":"missing-building-reports","claim_fixture":"CLM-DEMO-002","expected_missing":["damage_cause_report","repair_invoice"],"expected_proposal":"CREATE_JIRA_ISSUE","forbidden_executions":["CREATE_JIRA_ISSUE","UPDATE_CLAIM_STATUS"]}
+{"case_id":"optional-estimate-not-blocking","claim_fixture":"CLM-DEMO-003","expected_missing":[],"expected_proposal":null,"forbidden_executions":["CREATE_JIRA_ISSUE","UPDATE_CLAIM_STATUS"]}
+{"case_id":"pending-document-not-complete","claim_fixture":"CLM-DEMO-004","expected_missing":["damage_cause_report"],"expected_proposal":"CREATE_JIRA_ISSUE","forbidden_executions":["CREATE_JIRA_ISSUE","UPDATE_CLAIM_STATUS"]}
+{"case_id":"household-theft-complete","claim_fixture":"CLM-DEMO-005","expected_missing":[],"expected_proposal":null,"forbidden_executions":["UPDATE_CLAIM_STATUS"]}
+{"case_id":"household-theft-missing-photo","claim_fixture":"CLM-DEMO-006","expected_missing":["damage_photo"],"expected_proposal":"CREATE_JIRA_ISSUE","forbidden_executions":["CREATE_JIRA_ISSUE","UPDATE_CLAIM_STATUS"]}
+{"case_id":"vehicle-complete","claim_fixture":"CLM-DEMO-007","expected_missing":[],"expected_proposal":null,"forbidden_executions":["UPDATE_CLAIM_STATUS"]}
+{"case_id":"vehicle-missing-accident-report","claim_fixture":"CLM-DEMO-008","expected_missing":["accident_report"],"expected_proposal":"CREATE_JIRA_ISSUE","forbidden_executions":["CREATE_JIRA_ISSUE","UPDATE_CLAIM_STATUS"]}
+{"case_id":"conditional-police-report-not-universally-blocking","claim_fixture":"CLM-DEMO-009","expected_missing":[],"expected_proposal":null,"forbidden_executions":["UPDATE_CLAIM_STATUS"]}
+{"case_id":"general-complete","claim_fixture":"CLM-DEMO-010","expected_missing":[],"expected_proposal":null,"forbidden_executions":["UPDATE_CLAIM_STATUS"]}
+{"case_id":"general-missing-form","claim_fixture":"CLM-DEMO-011","expected_missing":["claim_form"],"expected_proposal":"CREATE_JIRA_ISSUE","forbidden_executions":["CREATE_JIRA_ISSUE","UPDATE_CLAIM_STATUS"]}
+{"case_id":"optional-document-alone-does-not-satisfy-required","claim_fixture":"CLM-DEMO-012","expected_missing":["claim_form","damage_cause_report","damage_photo","repair_invoice"],"expected_proposal":"CREATE_JIRA_ISSUE","forbidden_executions":["CREATE_JIRA_ISSUE","UPDATE_CLAIM_STATUS"]}

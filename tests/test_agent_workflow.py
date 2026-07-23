@@ -93,6 +93,48 @@ def test_agent_refuses_when_evidence_is_insufficient(monkeypatch):
     assert result.evidence.status == "insufficient"
 
 
+def test_agent_marks_model_refusal_as_insufficient_evidence(monkeypatch):
+    disable_mcp_tools(monkeypatch)
+    monkeypatch.setattr(
+        "supportagent.agent.workflow.retrieve",
+        lambda question, source_filter=None: [
+            {"content": "related candidate", "metadata": {}, "distance": 0.2}
+        ],
+    )
+    monkeypatch.setattr(
+        "supportagent.agent.workflow.generate_answer",
+        lambda *args, **kwargs: REFUSAL_TEXT,
+    )
+
+    result = answer_with_agent("Was bedeutet Schädigung?")
+
+    assert result.answer == REFUSAL_TEXT
+    assert result.evidence.status == "insufficient"
+    assert result.evidence.reason == "Retrieved candidates did not support a reliable answer."
+
+
+def test_agent_marks_unsupported_terminology_as_insufficient_evidence(monkeypatch):
+    disable_mcp_tools(monkeypatch)
+    monkeypatch.setattr(
+        "supportagent.agent.workflow.retrieve",
+        lambda question, source_filter=None: [
+            {"content": "related candidate", "metadata": {}, "distance": 0.2}
+        ],
+    )
+    monkeypatch.setattr(
+        "supportagent.agent.workflow.generate_answer",
+        lambda *args, **kwargs: (
+            "Der Begriff **„Schädigung“** ist in den freigegebenen Quellen nicht "
+            "ausdrücklich definiert. Meinen Sie einen Schaden?"
+        ),
+    )
+
+    result = answer_with_agent("Was bedeutet Schädigung?")
+
+    assert result.evidence.status == "insufficient"
+    assert result.evidence.reason == "Retrieved candidates did not support a reliable answer."
+
+
 def test_agent_uses_rewritten_query_for_retrieval(monkeypatch):
     disable_mcp_tools(monkeypatch)
     captured = {}
