@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
@@ -23,8 +25,19 @@ LLM_ERROR_STATUS = {
     LLMTimeoutError: 504,
 }
 
+logger = logging.getLogger(__name__)
 
-async def llm_exception_handler(_: Request, error: LLMError) -> JSONResponse:
+
+async def llm_exception_handler(request: Request, error: LLMError) -> JSONResponse:
+    request_id = getattr(request.state, "request_id", None)
+    logger.warning(
+        "llm_request_failed request_id=%s code=%s provider=%s model=%s retryable=%s",
+        request_id,
+        error.code,
+        error.provider,
+        error.model,
+        error.retryable,
+    )
     return JSONResponse(
         status_code=LLM_ERROR_STATUS.get(type(error), 500),
         content={
@@ -34,7 +47,7 @@ async def llm_exception_handler(_: Request, error: LLMError) -> JSONResponse:
                 "provider": error.provider,
                 "model": error.model,
                 "retryable": error.retryable,
-                "request_id": None,
+                "request_id": request_id,
             }
         },
     )

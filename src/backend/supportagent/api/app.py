@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 
 from supportagent.api.exception_handlers import register_exception_handlers
+from supportagent.api.middleware import register_request_logging
 from supportagent.api.router import register_routes
 from supportagent.claims import ensure_claim_schema
 from supportagent.core.logging_config import configure_logging
@@ -25,5 +26,6 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="SupportAgent", lifespan=lifespan)
+register_request_logging(app)
 register_exception_handlers(app)
 register_routes(app)

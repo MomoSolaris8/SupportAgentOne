@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 import supportagent.llm.service as llm_service
 from supportagent.api.exception_handlers import register_exception_handlers
+from supportagent.api.middleware import register_request_logging
 from supportagent.llm.errors import (
     LLMAuthenticationError,
     LLMInvalidRequestError,
@@ -65,6 +66,7 @@ def test_complete_chat_maps_provider_sdk_errors(monkeypatch):
 
 def test_api_handler_returns_safe_stable_error_contract():
     app = FastAPI()
+    register_request_logging(app)
     register_exception_handlers(app)
 
     @app.get("/failure")
@@ -77,15 +79,13 @@ def test_api_handler_returns_safe_stable_error_contract():
     response = TestClient(app).get("/failure")
 
     assert response.status_code == 503
-    assert response.json() == {
-        "error": {
-            "code": "llm_quota_exceeded",
-            "message": "Das Kontingent des ausgewählten KI-Anbieters ist aufgebraucht.",
-            "provider": "kimi",
-            "model": "kimi-k2.6",
-            "retryable": False,
-            "request_id": None,
-        }
-    }
+    error_body = response.json()["error"]
+    assert error_body["code"] == "llm_quota_exceeded"
+    assert error_body["message"] == "Das Kontingent des ausgewählten KI-Anbieters ist aufgebraucht."
+    assert error_body["provider"] == "kimi"
+    assert error_body["model"] == "kimi-k2.6"
+    assert error_body["retryable"] is False
+    assert error_body["request_id"]
+    assert response.headers["X-Request-ID"] == error_body["request_id"]
     assert "org-secret" not in response.text
     assert "api_key" not in response.text
