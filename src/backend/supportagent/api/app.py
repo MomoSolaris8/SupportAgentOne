@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from dotenv import load_dotenv
 from fastapi import FastAPI
 
@@ -12,15 +14,16 @@ from supportagent.uploads import ensure_upload_schema
 load_dotenv()
 configure_logging()
 
-app = FastAPI(title="SupportAgent")
-register_exception_handlers(app)
-register_routes(app)
-
-
-@app.on_event("startup")
-def startup() -> None:
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
     ensure_rag_schema()
     ensure_mcp_schema()
     ensure_upload_schema()
     ensure_claim_schema()
     seed_builtin_rag_if_enabled()
+    yield
+
+
+app = FastAPI(title="SupportAgent", lifespan=lifespan)
+register_exception_handlers(app)
+register_routes(app)
