@@ -1,6 +1,7 @@
 from functools import lru_cache
 from typing import Any
 
+from supportagent.llm.errors import LLMError, map_provider_error
 from supportagent.llm.providers import AnthropicProvider, OpenAICompatibleProvider
 from supportagent.llm.providers.base import ChatProvider
 from supportagent.llm.registry import get_provider_settings, resolve_model
@@ -31,10 +32,19 @@ def complete_chat(
     tool_choice: str | None = None,
 ) -> ChatCompletion:
     profile = resolve_model(requested_model, task=task)
-    return _provider(profile.provider).complete(
-        profile,
-        messages,
-        temperature=temperature,
-        tools=tools,
-        tool_choice=tool_choice,
-    )
+    try:
+        return _provider(profile.provider).complete(
+            profile,
+            messages,
+            temperature=temperature,
+            tools=tools,
+            tool_choice=tool_choice,
+        )
+    except LLMError:
+        raise
+    except Exception as error:
+        raise map_provider_error(
+            error,
+            provider=profile.provider,
+            model=profile.id,
+        ) from error

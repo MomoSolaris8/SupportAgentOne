@@ -1,4 +1,14 @@
 from supportagent.llm.config import ChatModelOption, get_chat_model_options, resolve_chat_model
+from supportagent.llm.errors import (
+    LLMAuthenticationError,
+    LLMError,
+    LLMInvalidRequestError,
+    LLMModelNotFoundError,
+    LLMProviderUnavailableError,
+    LLMQuotaExceededError,
+    LLMRateLimitError,
+    LLMTimeoutError,
+)
 from supportagent.llm.registry import (
     ModelConfigurationError,
     get_model_options,
@@ -10,7 +20,15 @@ from supportagent.llm.service import complete_chat
 __all__ = [
     "ChatCompletion",
     "ChatModelOption",
+    "LLMAuthenticationError",
+    "LLMError",
+    "LLMInvalidRequestError",
+    "LLMModelNotFoundError",
+    "LLMProviderUnavailableError",
+    "LLMQuotaExceededError",
+    "LLMRateLimitError",
     "LLMTask",
+    "LLMTimeoutError",
     "ModelConfigurationError",
     "ModelProfile",
     "ToolCall",

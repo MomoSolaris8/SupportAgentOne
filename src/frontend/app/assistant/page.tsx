@@ -1007,7 +1007,14 @@ export default function LegacyAssistantPage() {
       });
 
       if (!response.ok) {
-        throw new Error(`Backend returned ${response.status}`);
+        const payload = (await response.json().catch(() => null)) as
+          | { detail?: string; error?: { message?: string } }
+          | null;
+        throw new Error(
+          payload?.error?.message ??
+            payload?.detail ??
+            `Request failed (${response.status})`
+        );
       }
 
       const data = (await response.json()) as AskResponse;

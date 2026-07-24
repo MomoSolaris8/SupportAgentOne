@@ -165,8 +165,14 @@ function CaseAssistant({ claimContext, onClose }: { claimContext?: ClaimContext;
         })
       });
       if (!response.ok) {
-        const payload = (await response.json().catch(() => null)) as { detail?: string } | null;
-        throw new Error(payload?.detail ?? `Request failed (${response.status})`);
+        const payload = (await response.json().catch(() => null)) as
+          | { detail?: string; error?: { message?: string } }
+          | null;
+        throw new Error(
+          payload?.error?.message ??
+            payload?.detail ??
+            `Request failed (${response.status})`
+        );
       }
       const payload = (await response.json()) as AskResponse;
       const toolCount = payload.trace.mcp_tool_calls.length;

@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 from fastapi import FastAPI
 
+from supportagent.api.exception_handlers import register_exception_handlers
 from supportagent.api.router import register_routes
 from supportagent.claims import ensure_claim_schema
 from supportagent.core.logging_config import configure_logging
@@ -12,6 +13,7 @@ load_dotenv()
 configure_logging()
 
 app = FastAPI(title="SupportAgent")
+register_exception_handlers(app)
 register_routes(app)
 
 
