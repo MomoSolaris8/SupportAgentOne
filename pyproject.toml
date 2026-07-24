@@ -2,7 +2,26 @@
 name = "supportagent"
 version = "0.1.0"
 requires-python = ">=3.10"
-dependencies = ["pypdf", "openai", "psycopg[binary]", "python-dotenv", "pgvector", "fastapi", "uvicorn", "requests", "python-multipart", "langfuse", "langgraph", "mcp", "langchain", "langchain-openai", "boto3"]
+dependencies = [
+    "pypdf",
+    "openai",
+    "anthropic",
+    "psycopg[binary]",
+    "python-dotenv",
+    "pgvector",
+    "fastapi",
+    "uvicorn",
+    "requests",
+    "python-multipart",
+    "langfuse",
+    "langgraph",
+    "mcp",
+    "langchain",
+    "langchain-openai",
+    "langchain-anthropic",
+    "boto3",
+    "boto3-stubs~=1.43.54",
+]
 
 [project.optional-dependencies]
 dev = ["pytest"]

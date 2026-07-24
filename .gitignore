@@ -339,3 +339,7 @@ pyrightconfig.json
 
 # Secrets
 .env
+
+# Local coding-agent instructions
+AGENTS.md
+AGENTS.de.md

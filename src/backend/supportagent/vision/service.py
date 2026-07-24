@@ -3,7 +3,7 @@ import json
 import os
 from dataclasses import asdict, dataclass, field
 
-from openai import OpenAI
+from supportagent.llm import complete_chat
 
 
 VISION_PROMPT = """Analyze the uploaded image for an insurance support workflow.
@@ -86,9 +86,7 @@ def _analysis_from_json(content: str) -> ImageAnalysis:
 
 def analyze_image(image_bytes: bytes, content_type: str, filename: str) -> ImageAnalysis:
     model = os.environ.get("VISION_MODEL")
-    api_key = os.environ.get("EMBEDDING_API_KEY")
-    base_url = os.environ.get("EMBEDDING_BASE_URL")
-    if not model or not api_key or not base_url:
+    if not model:
         return ImageAnalysis(
             limitations=(
                 f"Bild '{filename}' wurde hochgeladen ({content_type}). "
@@ -97,10 +95,8 @@ def analyze_image(image_bytes: bytes, content_type: str, filename: str) -> Image
         )
 
     data_url = f"data:{content_type};base64,{base64.b64encode(image_bytes).decode('ascii')}"
-    client = OpenAI(api_key=api_key, base_url=base_url)
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
+    response = complete_chat(
+        [
             {
                 "role": "user",
                 "content": [
@@ -109,9 +105,11 @@ def analyze_image(image_bytes: bytes, content_type: str, filename: str) -> Image
                 ],
             }
         ],
+        requested_model=model,
+        task="vision",
         temperature=0,
     )
-    return _analysis_from_json(response.choices[0].message.content or "")
+    return _analysis_from_json(response.content)
 
 
 def summarize_image(image_bytes: bytes, content_type: str, filename: str) -> str:

@@ -43,6 +43,15 @@ type AssistantMessage = {
   error?: boolean;
 };
 
+type ChatModel = {
+  id: string;
+  label: string;
+  provider: string;
+  capabilities: string[];
+  description: string;
+  default: boolean;
+};
+
 type AskResponse = {
   answer: string;
   sources: Array<{ title: string; source: string }>;
@@ -50,6 +59,7 @@ type AskResponse = {
     route_source: string;
     evidence_status: string;
     mcp_tool_calls: Array<{ server: string; tool: string }>;
+    model: string;
   };
 };
 
@@ -82,6 +92,8 @@ function CaseAssistant({ claimContext, onClose }: { claimContext?: ClaimContext;
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
   const [loading, setLoading] = useState(false);
   const [threadId, setThreadId] = useState<string | null>(null);
+  const [models, setModels] = useState<ChatModel[]>([]);
+  const [selectedModel, setSelectedModel] = useState("");
   const logRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -94,6 +106,20 @@ function CaseAssistant({ claimContext, onClose }: { claimContext?: ClaimContext;
     setThreadId(next);
     setMessages([]);
   }, [claimContext?.id]);
+
+  useEffect(() => {
+    fetch("/api/models", { credentials: "include" })
+      .then(async (response) => {
+        if (!response.ok) return { models: [] as ChatModel[] };
+        return (await response.json()) as { models: ChatModel[] };
+      })
+      .then((payload) => {
+        setModels(payload.models);
+        const defaultModel = payload.models.find((model) => model.default) ?? payload.models[0];
+        if (defaultModel) setSelectedModel(defaultModel.id);
+      })
+      .catch(() => setModels([]));
+  }, []);
 
   useEffect(() => {
     logRef.current?.scrollTo({ top: logRef.current.scrollHeight, behavior: "smooth" });
@@ -133,6 +159,7 @@ function CaseAssistant({ claimContext, onClose }: { claimContext?: ClaimContext;
           question: contextualQuestion,
           source: "confluence",
           thread_id: threadId,
+          model: selectedModel || undefined,
           enabled_mcp_servers: [],
           enabled_skills: []
         })
@@ -241,8 +268,25 @@ function CaseAssistant({ claimContext, onClose }: { claimContext?: ClaimContext;
         </button>
       </form>
       <footer className="opsAssistantFooter">
-        <ShieldCheck size={13} />
-        Evidence-bound · No status changes
+        <div>
+          <ShieldCheck size={13} />
+          <span>Evidence-bound · No status changes</span>
+        </div>
+        <label>
+          <span className="srOnly">Assistant model</span>
+          <select
+            aria-label="Assistant model"
+            disabled={!models.length || loading}
+            onChange={(event) => setSelectedModel(event.target.value)}
+            value={selectedModel}
+          >
+            {models.map((model) => (
+              <option key={model.id} value={model.id}>
+                {model.label} · {model.provider}
+              </option>
+            ))}
+          </select>
+        </label>
       </footer>
     </aside>
   );

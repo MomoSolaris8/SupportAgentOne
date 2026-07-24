@@ -1,13 +1,9 @@
 import asyncio
-import json
 import logging
-import os
 from dataclasses import dataclass, field
 from typing import Any
 
-from openai import OpenAI
-
-from supportagent.llm import resolve_chat_model
+from supportagent.llm import complete_chat
 from supportagent.mcp_client.client import MultiServerMCPClient
 from supportagent.mcp_client.config import (
     dynamic_mcp_enabled,
@@ -105,11 +101,6 @@ async def run_dynamic_mcp_agent(
     if not openai_tools:
         return MCPAgentResult(answer=None)
 
-    llm = OpenAI(
-        api_key=os.environ["EMBEDDING_API_KEY"],
-        base_url=os.environ["EMBEDDING_BASE_URL"],
-    )
-    chat_model = resolve_chat_model(model)
     messages: list[dict[str, Any]] = [
         {
             "role": "system",
@@ -124,32 +115,43 @@ async def run_dynamic_mcp_agent(
     ]
 
     try:
-        first = llm.chat.completions.create(
-            model=chat_model,
-            messages=messages,
+        first = complete_chat(
+            messages,
+            requested_model=model,
+            task="tool",
             tools=openai_tools,
             tool_choice="auto",
+            temperature=0,
         )
     except Exception as error:
         logger.exception("mcp_tool_choice_failed")
         return MCPAgentResult(answer=None, error=str(error))
 
-    assistant_message = first.choices[0].message
-    tool_calls = assistant_message.tool_calls or []
+    tool_calls = first.tool_calls
     if not tool_calls:
-        content = (assistant_message.content or "").strip()
+        content = first.content.strip()
         if content == "NO_TOOL_NEEDED":
             return MCPAgentResult(answer=None)
         return MCPAgentResult(answer=content or None)
 
-    messages.append(assistant_message.model_dump(exclude_none=True))
+    messages.append(
+        {
+            "role": "assistant",
+            "content": first.content,
+            "tool_calls": [
+                {
+                    "id": tool_call.id,
+                    "name": tool_call.name,
+                    "arguments": tool_call.arguments,
+                }
+                for tool_call in tool_calls
+            ],
+        }
+    )
     traces: list[MCPToolCallTrace] = []
     for tool_call in tool_calls:
-        server_name, tool_name = _decode_openai_tool_name(tool_call.function.name)
-        try:
-            arguments = json.loads(tool_call.function.arguments or "{}")
-        except json.JSONDecodeError:
-            arguments = {}
+        server_name, tool_name = _decode_openai_tool_name(tool_call.name)
+        arguments = tool_call.arguments
 
         arguments_with_credentials = inject_user_credentials(user_id, server_name, arguments)
         try:
@@ -191,17 +193,19 @@ async def run_dynamic_mcp_agent(
             }
         )
 
-    final = llm.chat.completions.create(
-        model=chat_model,
-        messages=messages
+    final = complete_chat(
+        messages
         + [
             {
                 "role": "user",
                 "content": "Use the MCP tool results above to answer the original request concisely.",
             }
         ],
+        requested_model=model,
+        task="tool",
+        temperature=0,
     )
-    return MCPAgentResult(answer=final.choices[0].message.content, tool_calls=traces)
+    return MCPAgentResult(answer=final.content, tool_calls=traces)
 
 
 def run_dynamic_mcp_agent_sync(

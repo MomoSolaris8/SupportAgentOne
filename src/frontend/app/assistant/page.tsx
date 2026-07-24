@@ -178,6 +178,9 @@ type SkillsResponse = {
 type ChatModel = {
   id: string;
   label: string;
+  provider: string;
+  capabilities: string[];
+  description: string;
   default: boolean;
 };
 
@@ -243,7 +246,7 @@ export default function LegacyAssistantPage() {
   const [isMcpSelectionInitialized, setIsMcpSelectionInitialized] = useState(false);
   const [isMcpSelectorOpen, setIsMcpSelectorOpen] = useState(false);
   const [models, setModels] = useState<ChatModel[]>([]);
-  const [selectedModel, setSelectedModel] = useState("qwen-plus");
+  const [selectedModel, setSelectedModel] = useState("");
   const [isModelSelectorOpen, setIsModelSelectorOpen] = useState(false);
   const [attachedImages, setAttachedImages] = useState<UploadedImage[]>([]);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
@@ -1477,7 +1480,7 @@ export default function LegacyAssistantPage() {
                 }}
                 type="button"
               >
-                {selectedModel}
+                {models.find((model) => model.id === selectedModel)?.label ?? selectedModel ?? "Model"}
               </button>
               {isModelSelectorOpen ? (
                 <div className="mcpMenu modelMenu">
@@ -1496,7 +1499,7 @@ export default function LegacyAssistantPage() {
                           type="radio"
                         />
                         <span>{model.label}</span>
-                        <small>{model.default ? "default" : "available"}</small>
+                        <small>{model.provider}{model.default ? " · default" : ""}</small>
                       </label>
                     ))
                   ) : (

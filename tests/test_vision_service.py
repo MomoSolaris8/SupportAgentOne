@@ -1,4 +1,5 @@
 from supportagent.vision.service import analyze_image, summarize_image
+from supportagent.llm import ChatCompletion
 
 
 def test_summarize_image_returns_fallback_without_vision_model(monkeypatch):
@@ -13,8 +14,9 @@ def test_summarize_image_returns_fallback_without_vision_model(monkeypatch):
 
 
 def test_analyze_image_parses_structured_vision_response(monkeypatch):
-    class FakeMessage:
-        content = """
+    def fake_complete_chat(messages, **kwargs):
+        return ChatCompletion(
+            content="""
         {
           "ocr_text": "Rechnung Nr. 42",
           "visible_objects": ["Dokument", "Totalsumme"],
@@ -24,22 +26,13 @@ def test_analyze_image_parses_structured_vision_response(monkeypatch):
           "insurance_relevant_facts": ["Es ist eine Rechnung sichtbar."],
           "limitations": "Ein Bereich ist unscharf."
         }
-        """
-
-    class FakeChoice:
-        message = FakeMessage()
-
-    class FakeCompletions:
-        def create(self, **kwargs):
-            return type("Response", (), {"choices": [FakeChoice()]})()
-
-    class FakeClient:
-        chat = type("Chat", (), {"completions": FakeCompletions()})()
+        """,
+            model_id="qwen-vl-plus",
+            provider="qwen",
+        )
 
     monkeypatch.setenv("VISION_MODEL", "qwen-vl-plus")
-    monkeypatch.setenv("EMBEDDING_API_KEY", "key")
-    monkeypatch.setenv("EMBEDDING_BASE_URL", "https://example.invalid/v1")
-    monkeypatch.setattr("supportagent.vision.service.OpenAI", lambda **kwargs: FakeClient())
+    monkeypatch.setattr("supportagent.vision.service.complete_chat", fake_complete_chat)
 
     analysis = analyze_image(b"fake-image", "image/png", "invoice.png")
 
@@ -49,23 +42,15 @@ def test_analyze_image_parses_structured_vision_response(monkeypatch):
 
 
 def test_analyze_image_keeps_non_json_response_as_fact(monkeypatch):
-    class FakeMessage:
-        content = "Das Bild zeigt einen sichtbaren Schaden."
-
-    class FakeChoice:
-        message = FakeMessage()
-
-    class FakeCompletions:
-        def create(self, **kwargs):
-            return type("Response", (), {"choices": [FakeChoice()]})()
-
-    class FakeClient:
-        chat = type("Chat", (), {"completions": FakeCompletions()})()
+    def fake_complete_chat(messages, **kwargs):
+        return ChatCompletion(
+            content="Das Bild zeigt einen sichtbaren Schaden.",
+            model_id="qwen-vl-plus",
+            provider="qwen",
+        )
 
     monkeypatch.setenv("VISION_MODEL", "qwen-vl-plus")
-    monkeypatch.setenv("EMBEDDING_API_KEY", "key")
-    monkeypatch.setenv("EMBEDDING_BASE_URL", "https://example.invalid/v1")
-    monkeypatch.setattr("supportagent.vision.service.OpenAI", lambda **kwargs: FakeClient())
+    monkeypatch.setattr("supportagent.vision.service.complete_chat", fake_complete_chat)
 
     analysis = analyze_image(b"fake-image", "image/png", "damage.png")
 

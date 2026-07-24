@@ -13,7 +13,7 @@ from supportagent.core.answer import (
     generate_answer,
 )
 from supportagent.integrations.langfuse_client import get_langfuse_client
-from supportagent.llm import resolve_chat_model
+from supportagent.llm import resolve_model
 from supportagent.memory import ChatMessage, LongMemory, load_memory_context, save_memory_turn
 from supportagent.mcp_client.tool_agent import MCPToolCallTrace, run_dynamic_mcp_agent_sync
 from supportagent.rag.retrieval import retrieve
@@ -311,7 +311,7 @@ def answer_with_agent(
     enabled_skills: list[str] | None = None,
 ) -> AgentResult:
     logger.info("agent_start source_filter=%s question=%r", source_filter, question)
-    model = resolve_chat_model(requested_model)
+    model = resolve_model(requested_model, task="chat").id
     state = AGENT_GRAPH.invoke(
         {
             "question": question,

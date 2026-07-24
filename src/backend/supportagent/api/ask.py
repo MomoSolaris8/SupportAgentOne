@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from supportagent.agent.workflow import answer_with_agent
 from supportagent.api.schemas import AgentTrace, AskRequest, AskResponse, Source
 from supportagent.auth.dependencies import get_current_user
 from supportagent.auth.schemas import AuthUser
+from supportagent.llm import ModelConfigurationError
 from supportagent.uploads import get_image_contexts
 
 router = APIRouter(tags=["Ask"])
@@ -15,16 +16,19 @@ def ask(
     user: AuthUser = Depends(get_current_user),
 ) -> AskResponse:
     image_contexts = get_image_contexts(user.id, request.image_ids)
-    result = answer_with_agent(
-        request.question,
-        source_filter=request.source,
-        thread_id=request.thread_id,
-        user_id=user.id,
-        requested_model=request.model,
-        image_contexts=image_contexts,
-        enabled_mcp_servers=request.enabled_mcp_servers,
-        enabled_skills=request.enabled_skills,
-    )
+    try:
+        result = answer_with_agent(
+            request.question,
+            source_filter=request.source,
+            thread_id=request.thread_id,
+            user_id=user.id,
+            requested_model=request.model,
+            image_contexts=image_contexts,
+            enabled_mcp_servers=request.enabled_mcp_servers,
+            enabled_skills=request.enabled_skills,
+        )
+    except ModelConfigurationError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
     sources = [
         Source(
             id=i,

@@ -98,8 +98,14 @@ Copy `.env.example` to `.env` and fill in:
 
 - `ATLASSIAN_BASE_URL`, `ATLASSIAN_EMAIL`, `ATLASSIAN_API_TOKEN` - Confluence/Jira Cloud API token
 - `CONFLUENCE_SPACE_KEY`, `JIRA_PROJECT_KEY` - the space/project to read from and write to
-- `EMBEDDING_API_KEY` - Alibaba Cloud Model Studio (DashScope) API key, used via its
-  OpenAI-compatible endpoint (`EMBEDDING_BASE_URL`) for both embeddings and chat (`CHAT_MODEL`)
+- `EMBEDDING_API_KEY`, `EMBEDDING_BASE_URL` - embedding provider credentials
+- `DASHSCOPE_API_KEY`, `DASHSCOPE_BASE_URL` - Qwen chat credentials; legacy
+  installations fall back to `EMBEDDING_*`
+- `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` / `KIMI_API_KEY` - optional providers. Models from an
+  unconfigured provider are not returned to the frontend
+- `CHAT_MODELS` - model IDs allowed in the UI; `CHAT_MODEL` selects the default
+- `CLAIM_REVIEW_MODEL`, `TOOL_MODEL`, `VISION_MODEL` - backend-owned task
+  policies. These are not overridden by an ordinary chat model selection
 - `DATABASE_URL` - points at the pgvector container started by `docker compose up`
 - `AUTH_SESSION_TTL_DAYS`, `AUTH_COOKIE_SECURE` - local email/password session
   settings. Keep `AUTH_COOKIE_SECURE=false` for plain HTTP local development and
@@ -115,6 +121,7 @@ platforms:
 - `supportagent/memory/` - short-memory and long-memory schemas, SQL store, service API
 - `supportagent/rag/` - ingestion, chunking, embeddings, pgvector storage, retrieval
 - `supportagent/agent/` - LangGraph workflow, routing, query rewrite, evidence checks
+- `supportagent/llm/` - provider adapters, model registry, task policy routing
 - `supportagent/integrations/` - external service clients such as Atlassian and Langfuse
 - `supportagent/core/` - shared domain models, answer generation, logging setup
 

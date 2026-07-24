@@ -4,6 +4,7 @@ from supportagent.core.answer import (
     enforce_answer_contract,
     generate_answer,
 )
+from supportagent.llm import ChatCompletion
 
 
 def test_generate_answer_refuses_when_no_chunks_are_retrieved():
@@ -40,23 +41,16 @@ def test_terminology_gap_reports_insufficient_evidence():
 def test_generate_answer_uses_image_context_without_chunks(monkeypatch):
     captured = {}
 
-    class FakeMessage:
-        content = "Das Bild zeigt einen sichtbaren Schaden. Fuer Deckungsfragen fehlen Quellen."
+    def fake_complete_chat(messages, **kwargs):
+        captured["messages"] = messages
+        captured.update(kwargs)
+        return ChatCompletion(
+            content="Das Bild zeigt einen sichtbaren Schaden. Fuer Deckungsfragen fehlen Quellen.",
+            model_id="qwen-plus",
+            provider="qwen",
+        )
 
-    class FakeChoice:
-        message = FakeMessage()
-
-    class FakeCompletions:
-        def create(self, **kwargs):
-            captured.update(kwargs)
-            return type("Response", (), {"choices": [FakeChoice()]})()
-
-    class FakeClient:
-        chat = type("Chat", (), {"completions": FakeCompletions()})()
-
-    monkeypatch.setenv("EMBEDDING_API_KEY", "key")
-    monkeypatch.setenv("EMBEDDING_BASE_URL", "https://example.invalid/v1")
-    monkeypatch.setattr("supportagent.core.answer.OpenAI", lambda **kwargs: FakeClient())
+    monkeypatch.setattr("supportagent.core.answer.complete_chat", fake_complete_chat)
 
     answer = generate_answer(
         "Was siehst du?",
@@ -72,23 +66,16 @@ def test_generate_answer_uses_image_context_without_chunks(monkeypatch):
 def test_generate_answer_includes_image_context(monkeypatch):
     captured = {}
 
-    class FakeMessage:
-        content = "answer"
+    def fake_complete_chat(messages, **kwargs):
+        captured["messages"] = messages
+        captured.update(kwargs)
+        return ChatCompletion(
+            content="answer",
+            model_id="qwen-plus",
+            provider="qwen",
+        )
 
-    class FakeChoice:
-        message = FakeMessage()
-
-    class FakeCompletions:
-        def create(self, **kwargs):
-            captured.update(kwargs)
-            return type("Response", (), {"choices": [FakeChoice()]})()
-
-    class FakeClient:
-        chat = type("Chat", (), {"completions": FakeCompletions()})()
-
-    monkeypatch.setenv("EMBEDDING_API_KEY", "key")
-    monkeypatch.setenv("EMBEDDING_BASE_URL", "https://example.invalid/v1")
-    monkeypatch.setattr("supportagent.core.answer.OpenAI", lambda **kwargs: FakeClient())
+    monkeypatch.setattr("supportagent.core.answer.complete_chat", fake_complete_chat)
 
     answer = generate_answer(
         "Welche Unterlagen brauche ich fuer eine Schadenmeldung?",
@@ -121,23 +108,16 @@ def test_generate_answer_includes_image_context(monkeypatch):
 def test_generate_answer_prefers_image_path_for_image_question(monkeypatch):
     captured = {}
 
-    class FakeMessage:
-        content = "Das Bild zeigt einen sichtbaren Fahrzeugschaden."
+    def fake_complete_chat(messages, **kwargs):
+        captured["messages"] = messages
+        captured.update(kwargs)
+        return ChatCompletion(
+            content="Das Bild zeigt einen sichtbaren Fahrzeugschaden.",
+            model_id="qwen-plus",
+            provider="qwen",
+        )
 
-    class FakeChoice:
-        message = FakeMessage()
-
-    class FakeCompletions:
-        def create(self, **kwargs):
-            captured.update(kwargs)
-            return type("Response", (), {"choices": [FakeChoice()]})()
-
-    class FakeClient:
-        chat = type("Chat", (), {"completions": FakeCompletions()})()
-
-    monkeypatch.setenv("EMBEDDING_API_KEY", "key")
-    monkeypatch.setenv("EMBEDDING_BASE_URL", "https://example.invalid/v1")
-    monkeypatch.setattr("supportagent.core.answer.OpenAI", lambda **kwargs: FakeClient())
+    monkeypatch.setattr("supportagent.core.answer.complete_chat", fake_complete_chat)
 
     answer = generate_answer(
         "Was siehst du auf dem Bild?",

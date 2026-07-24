@@ -7,6 +7,10 @@ def disable_mcp_tools(monkeypatch):
         "supportagent.agent.workflow.run_dynamic_mcp_agent_sync",
         lambda *args, **kwargs: type("MCPResult", (), {"answer": None, "tool_calls": [], "error": None})(),
     )
+    monkeypatch.setattr(
+        "supportagent.agent.workflow.resolve_model",
+        lambda *args, **kwargs: type("Model", (), {"id": "qwen-plus"})(),
+    )
 
 
 def test_agent_routes_jira_question_to_jira(monkeypatch):

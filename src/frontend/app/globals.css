@@ -2305,9 +2305,38 @@ details a {
   color: var(--ops-faint);
   display: flex;
   font-size: 8px;
-  gap: 5px;
-  justify-content: center;
+  gap: 8px;
+  justify-content: space-between;
   padding: 0 14px 11px;
+}
+
+.opsAssistantFooter > div {
+  align-items: center;
+  display: flex;
+  gap: 5px;
+  min-width: 0;
+}
+
+.opsAssistantFooter select {
+  background: var(--ops-panel);
+  border: 1px solid var(--ops-line);
+  border-radius: 4px;
+  color: var(--ops-muted);
+  font: inherit;
+  max-width: 145px;
+  min-height: 24px;
+  padding: 2px 22px 2px 6px;
+}
+
+.srOnly {
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  width: 1px;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
 }
 
 .opsAssistantReopen {

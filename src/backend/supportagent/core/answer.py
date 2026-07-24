@@ -1,8 +1,4 @@
-import os
-
-from openai import OpenAI
-
-from supportagent.llm import resolve_chat_model
+from supportagent.llm import LLMTask, complete_chat
 from supportagent.memory.schemas import ChatMessage, LongMemory
 from supportagent.prompts.insurance_knowledge import (
     FEW_SHOT_MESSAGES,
@@ -74,21 +70,15 @@ def generate_answer(
     skill_instructions: list[str] | None = None,
     image_contexts: list[str] | None = None,
     model: str | None = None,
+    task: LLMTask = "chat",
 ) -> str:
     if not chunks and not image_contexts:
         return REFUSAL_TEXT
 
-    client = OpenAI(
-        api_key=os.environ["EMBEDDING_API_KEY"],
-        base_url=os.environ["EMBEDDING_BASE_URL"],
-    )
-    chat_model = resolve_chat_model(model)
-
     if image_contexts and (not chunks or is_image_focused_question(question)):
         image_context_text = "\n\n".join(image_contexts)
-        response = client.chat.completions.create(
-            model=chat_model,
-            messages=[
+        response = complete_chat(
+            [
                 {"role": "system", "content": IMAGE_ONLY_SYSTEM_PROMPT},
                 {
                     "role": "user",
@@ -99,9 +89,11 @@ def generate_answer(
                     ),
                 },
             ],
+            requested_model=model,
+            task=task,
             temperature=0,
         )
-        return enforce_answer_contract(response.choices[0].message.content)
+        return enforce_answer_contract(response.content)
 
     context = "\n\n".join(
         f"[{i}] ({chunk['metadata']['source']}) {chunk['metadata']['title']}\n{chunk['content']}"
@@ -126,9 +118,8 @@ def generate_answer(
         "Leistungsdetails muessen weiterhin aus den nummerierten Quellen belegt werden."
     )
 
-    response = client.chat.completions.create(
-        model=chat_model,
-        messages=[
+    response = complete_chat(
+        [
             {"role": "system", "content": SYSTEM_PROMPT},
             *FEW_SHOT_MESSAGES,
             {
@@ -136,6 +127,8 @@ def generate_answer(
                 "content": f"{memory_context}\n\n{skill_context}\n\n{image_context}\n\nFrage: {question}\n\nQuellen:\n{context}",
             },
         ],
+        requested_model=model,
+        task=task,
         temperature=0,
     )
-    return enforce_answer_contract(response.choices[0].message.content)
+    return enforce_answer_contract(response.content)

@@ -136,7 +136,7 @@ def test_review_graph_uses_verified_evidence_and_only_proposes_write(monkeypatch
     monkeypatch.setattr(
         review_workflow,
         "generate_answer",
-        lambda question, chunks: "Evidence-backed manual review recommendation [1].",
+        lambda question, chunks, **kwargs: "Evidence-backed manual review recommendation [1].",
     )
     proposed_requests = []
 

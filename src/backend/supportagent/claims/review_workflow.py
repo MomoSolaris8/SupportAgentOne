@@ -118,7 +118,13 @@ def generate_recommendation_node(state: ClaimReviewState) -> ClaimReviewState:
         "Behavior examples (these define behavior, not policy facts):\n"
         f"{format_claim_review_few_shots()}"
     )
-    return {"recommendation": generate_answer(question, state["chunks"])}
+    return {
+        "recommendation": generate_answer(
+            question,
+            state["chunks"],
+            task="claim_review",
+        )
+    }
 
 
 def propose_jira_node(state: ClaimReviewState) -> ClaimReviewState:
