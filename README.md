@@ -10,57 +10,57 @@ RAG pipeline over a real Confluence space + Jira project, for the
 graph TD
     User[👤 Browser]
 
-    subgraph SC["🌐 Frontend"]
-        Dashboard[frontend<br/>Next.js]
-    end
+subgraph SC["🌐 Frontend"]
+Dashboard[frontend<br/>Next.js]
+end
 
-    subgraph VC["⚡ Backend API"]
-        API[api.py<br/>POST /ask]
-        Retrieval[retrieval.py<br/>retrieve]
-        Answer[answer.py<br/>generate_answer]
-    end
+subgraph VC["⚡ Backend API"]
+API[api.py<br/>POST /ask]
+Retrieval[retrieval.py<br/>retrieve]
+Answer[answer.py<br/>generate_answer]
+end
 
-    subgraph SB["🗄️ Database"]
-        PG[(Postgres + pgvector)]
-    end
+subgraph SB["🗄️ Database"]
+PG[(Postgres + pgvector)]
+end
 
-    subgraph DS["🤖 AI Services"]
-        Embed[text-embedding-v3]
-        Chat[qwen3-max]
-    end
+subgraph DS["🤖 AI Services"]
+Embed[text-embedding-v3]
+Chat[qwen3-max]
+end
 
-    User -->|ask question| Dashboard
-    Dashboard -->|POST /ask| API
+User -->|ask question|Dashboard
+Dashboard -->|POST /ask|API
 
-    API --> Retrieval
-    Retrieval --> Embed
-    Embed --> Retrieval
+API --> Retrieval
+Retrieval --> Embed
+Embed --> Retrieval
 
-    Retrieval --> PG
-    PG --> Retrieval
+Retrieval --> PG
+PG --> Retrieval
 
-    Retrieval --> API
+Retrieval --> API
 
-    API --> Answer
-    Answer --> Chat
-    Chat --> Answer
+API --> Answer
+Answer --> Chat
+Chat --> Answer
 
-    Answer --> API
-    API --> Dashboard
-    Dashboard --> User
+Answer --> API
+API --> Dashboard
+Dashboard --> User
 
-    %% Colors
-    classDef frontend fill:#4f46e5,color:#fff
-    classDef backend fill:#059669,color:#fff
-    classDef database fill:#dc2626,color:#fff
-    classDef ai fill:#ea580c,color:#fff
-    classDef user fill:#6b7280,color:#fff
+%% Colors
+classDef frontend fill: #4f46e5, color: #fff
+classDef backend fill: #059669, color: #fff
+classDef database fill: #dc2626, color: #fff
+classDef ai fill: #ea580c, color: #fff
+classDef user fill: #6b7280, color: #fff
 
-    class Dashboard frontend
-    class API,Retrieval,Answer backend
-    class PG database
-    class Embed,Chat ai
-    class User user
+class Dashboard frontend
+class API,Retrieval, Answer backend
+class PG database
+class Embed,Chat ai
+class User user
 ```
 
 - `api.py` is a thin controller: it just calls `retrieve()` then `generate_answer()`.
@@ -286,13 +286,14 @@ cited sources. If the retrieved context doesn't support an answer, it returns
 a fixed controlled-refusal message instead.
 
 ### Agent workflow
+
 The original MVP used a deterministic RAG pipeline:
 
   ```text
   question -> retrieve -> generate_answer
   ```
 
-  The current version adds a minimal agent orchestration layer:
+The current version adds a minimal agent orchestration layer:
 
   ```text
   question
@@ -303,21 +304,22 @@ The original MVP used a deterministic RAG pipeline:
     -> generate_answer or controlled refusal
   ```
 
-  **`route_question()`** decides whether the question should search Confluence,
-  Jira, or both sources. The current implementation is rule-based and intentionally
-  deterministic, so it is easy to test and debug.
+**`route_question()`** decides whether the question should search Confluence,
+Jira, or both sources. The current implementation is rule-based and intentionally
+deterministic, so it is easy to test and debug.
 
-  **`rewrite_query()`** expands user questions with insurance-domain terminology before retrieval. The rewritten query is used only for
-  retrieval; answer generation still receives the original user question.
+**`rewrite_query()`** expands user questions with insurance-domain terminology before retrieval. The rewritten query is
+used only for
+retrieval; answer generation still receives the original user question.
 
-  **`check_evidence()`** validates the retrieved chunks before answer generation. If
-  no chunks are retrieved, the workflow returns the controlled refusal text without
-  calling the chat model.
+**`check_evidence()`** validates the retrieved chunks before answer generation. If
+no chunks are retrieved, the workflow returns the controlled refusal text without
+calling the chat model.
 
-  The FastAPI endpoint calls **`answer_with_agent()`**  instead of directly calling
-  retrieval and answer generation. This keeps the API layer thin and leaves room
-  for future agent steps such as query rewriting, second-pass retrieval, stronger
-  evidence checks, or a LangGraph workflow.
+The FastAPI endpoint calls **`answer_with_agent()`**  instead of directly calling
+retrieval and answer generation. This keeps the API layer thin and leaves room
+for future agent steps such as query rewriting, second-pass retrieval, stronger
+evidence checks, or a LangGraph workflow.
 
 ### Evaluation
 
@@ -362,6 +364,19 @@ module docstring for the dry-run / save workflow.
 - `src/frontend` - Next.js frontend that proxies `/api/ask` to FastAPI
 
 ## Tests
+
+# End-to-end tests
+
+测试完整链路：
+
+1. 启动 Postgres
+2. 启动 FastAPI
+3. 启动前端
+4. 用户访问 Assistant 页面
+5. 发送问题
+6. 前端调用 `/ask`
+7. 后端返回 answer、sources 和 trace
+8. 前端显示结果或错误信息
 
 ```bash
 python -m pytest
