@@ -10,8 +10,13 @@ from supportagent.claims.state_machine import (
 
 def test_claim_state_machine_allows_review_path():
     validate_claim_transition("DRAFT", "DOCUMENTS_PENDING")
+    validate_claim_transition("DRAFT", "READY_FOR_REVIEW")
     validate_claim_transition("DOCUMENTS_PENDING", "READY_FOR_REVIEW")
     validate_claim_transition("READY_FOR_REVIEW", "UNDER_REVIEW")
+    validate_claim_transition("UNDER_REVIEW", "READY_FOR_DECISION")
+    validate_claim_transition("READY_FOR_DECISION", "EXPERT_REVIEW_REQUIRED")
+    validate_claim_transition("READY_FOR_DECISION", "APPROVED")
+    validate_claim_transition("READY_FOR_DECISION", "REJECTED")
 
 
 def test_claim_state_machine_rejects_skipped_transition():
@@ -19,7 +24,7 @@ def test_claim_state_machine_rejects_skipped_transition():
         validate_claim_transition("DRAFT", "UNDER_REVIEW")
 
 
-def test_terminal_claim_decisions_are_outside_v01():
+def test_ai_review_cannot_skip_the_human_decision_state():
     with pytest.raises(ValueError):
         validate_claim_transition("UNDER_REVIEW", "APPROVED")
 

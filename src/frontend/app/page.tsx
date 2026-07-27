@@ -2,6 +2,7 @@
 
 import { ArrowRight, LockKeyhole, ShieldCheck } from "lucide-react";
 import { FormEvent, useEffect, useState } from "react";
+import { LanguageSwitcher, useI18n } from "./components/i18n";
 
 type AuthMode = "login" | "register" | "forgot" | "reset";
 
@@ -12,6 +13,7 @@ type AuthUser = {
 };
 
 export default function SignInPage() {
+  const { t } = useI18n();
   const [mode, setMode] = useState<AuthMode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -112,44 +114,45 @@ export default function SignInPage() {
       <section className="opsAuthContext">
         <div className="opsAuthBrand"><span>SA</span><strong>SupportAgent</strong></div>
         <div>
-          <p>Insurance operations</p>
-          <h1>Evidence-bound claims control.</h1>
-          <span>Review claim materials, inspect policy evidence, and govern every operational action.</span>
+          <p>{t("Insurance operations")}</p>
+          <h1>{t("Evidence-bound claims control.")}</h1>
+          <span>{t("Review claim materials, inspect policy evidence, and govern every operational action.")}</span>
         </div>
         <ul>
-          <li><ShieldCheck size={15} /><span><strong>Human approval</strong> for controlled actions</span></li>
-          <li><LockKeyhole size={15} /><span><strong>Evidence gates</strong> before recommendations</span></li>
+          <li><ShieldCheck size={15} /><span><strong>{t("Human approval")}</strong> {t("for controlled actions")}</span></li>
+          <li><LockKeyhole size={15} /><span><strong>{t("Evidence gates")}</strong> {t("before recommendations")}</span></li>
         </ul>
       </section>
 
       <section className="opsAuthFormPanel">
-        <div>
-          <p>Controlled workspace</p>
+        <LanguageSwitcher />
+        <div className="opsAuthIntro">
+          <p>{t("Controlled workspace")}</p>
           <h2>
             {mode === "login"
-              ? "Sign in"
+              ? t("Sign in")
               : mode === "register"
-                ? "Create account"
+                ? t("Create account")
                 : mode === "forgot"
-                  ? "Reset password"
-                  : "Set new password"}
+                  ? t("Reset password")
+                  : t("Set new password")}
           </h2>
-          <span>Use your SupportAgent account to access the claims workspace.</span>
+          <span>{t("Use your SupportAgent account to access the claims workspace.")}</span>
         </div>
 
         <form onSubmit={submit}>
           {mode !== "reset" ? (
-            <label>Email
+            <label>{t("Email")}
               <input autoComplete="email" onChange={(event) => setEmail(event.target.value)} required type="email" value={email} />
             </label>
           ) : null}
           {mode === "register" ? (
-            <label>Display name
+            <label>{t("Display name")}
               <input autoComplete="name" onChange={(event) => setDisplayName(event.target.value)} type="text" value={displayName} />
             </label>
           ) : null}
           {mode !== "forgot" ? (
-            <label>Password
+            <label>{t("Password")}
               <input
                 autoComplete={mode === "login" ? "current-password" : "new-password"}
                 minLength={mode === "login" ? 1 : 8}
@@ -161,26 +164,26 @@ export default function SignInPage() {
             </label>
           ) : null}
           {notice ? <p className="opsAuthNotice">{notice}</p> : null}
-          {resetLink ? <a className="opsAuthResetLink" href={resetLink}>Open reset link</a> : null}
+          {resetLink ? <a className="opsAuthResetLink" href={resetLink}>{t("Open reset link")}</a> : null}
           {error ? <p className="opsAuthError">{error}</p> : null}
           <button disabled={loading} type="submit">
             {loading
-              ? "Please wait…"
+              ? t("Please wait…")
               : mode === "login"
-                ? "Continue"
+                ? t("Continue")
                 : mode === "register"
-                  ? "Create account"
+                  ? t("Create account")
                   : mode === "forgot"
-                    ? "Send reset link"
-                    : "Update password"}
+                    ? t("Send reset link")
+                    : t("Update password")}
             {!loading ? <ArrowRight size={15} /> : null}
           </button>
         </form>
 
         <div className="opsAuthLinks">
-          {mode === "login" ? <button onClick={() => switchMode("forgot")} type="button">Forgot password?</button> : null}
+          {mode === "login" ? <button onClick={() => switchMode("forgot")} type="button">{t("Forgot password?")}</button> : null}
           <button onClick={() => switchMode(mode === "login" ? "register" : "login")} type="button">
-            {mode === "login" ? "Create a local account" : "Use an existing account"}
+            {mode === "login" ? t("Create a local account") : t("Use an existing account")}
           </button>
         </div>
       </section>

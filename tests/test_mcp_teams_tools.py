@@ -64,3 +64,49 @@ def test_create_message_posts_to_teams_chat(monkeypatch):
     assert calls[0][0] == "POST"
     assert calls[0][1].endswith("/chats/chat-id/messages")
     assert calls[0][2]["json_body"]["body"]["content"] == "hello"
+
+
+def test_create_default_calendar_event_adds_email_attendees(monkeypatch):
+    calls = []
+
+    def fake_request_json(method, url, **kwargs):
+        calls.append((method, url, kwargs))
+        return {"id": "event-1"}
+
+    monkeypatch.setattr(tools, "request_json", fake_request_json)
+    result = tools.create_default_calendar_event(
+        subject="Harness agent test",
+        start_time="2026-07-21T17:00:00",
+        end_time="2026-07-21T18:00:00",
+        attendees=["sharon@example.com", "alex@example.com"],
+        transaction_id="action-123",
+        access_token="token",
+    )
+
+    assert result == {"id": "event-1"}
+    payload = calls[0][2]["json_body"]
+    assert [item["emailAddress"]["address"] for item in payload["attendees"]] == [
+        "sharon@example.com",
+        "alex@example.com",
+    ]
+    assert payload["transactionId"] == "action-123"
+
+
+def test_create_calendar_event_omits_transaction_id_when_not_provided(monkeypatch):
+    calls = []
+
+    def fake_request_json(method, url, **kwargs):
+        calls.append((method, url, kwargs))
+        return {"id": "event-1"}
+
+    monkeypatch.setattr(tools, "request_json", fake_request_json)
+    tools.create_calendar_event(
+        user_id="me",
+        calendar_id="primary",
+        subject="Interview",
+        start_time="2026-07-21T17:00:00",
+        end_time="2026-07-21T18:00:00",
+        access_token="token",
+    )
+
+    assert "transactionId" not in calls[0][2]["json_body"]

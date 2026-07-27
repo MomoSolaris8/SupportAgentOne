@@ -7,6 +7,7 @@ from supportagent.llm.schemas import (
     ChatCompletion,
     ModelProfile,
     ProviderSettings,
+    TokenUsage,
     ToolCall,
 )
 
@@ -17,6 +18,36 @@ class OpenAICompatibleProvider:
         if settings.base_url:
             kwargs["base_url"] = settings.base_url
         self.client = OpenAI(**kwargs)
+
+    @staticmethod
+    def _convert_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        converted = []
+        for message in messages:
+            tool_calls = message.get("tool_calls")
+            if message.get("role") != "assistant" or not tool_calls:
+                converted.append(message)
+                continue
+
+            converted_calls = []
+            for call in tool_calls:
+                if "function" in call:
+                    converted_calls.append(call)
+                    continue
+                converted_calls.append(
+                    {
+                        "id": call["id"],
+                        "type": "function",
+                        "function": {
+                            "name": call["name"],
+                            "arguments": json.dumps(
+                                call.get("arguments", {}),
+                                ensure_ascii=False,
+                            ),
+                        },
+                    }
+                )
+            converted.append({**message, "tool_calls": converted_calls})
+        return converted
 
     def complete(
         self,
@@ -29,7 +60,7 @@ class OpenAICompatibleProvider:
     ) -> ChatCompletion:
         kwargs: dict[str, Any] = {
             "model": profile.provider_model,
-            "messages": messages,
+            "messages": self._convert_messages(messages),
         }
         omits_temperature = (
             profile.provider == "openai"
@@ -43,6 +74,9 @@ class OpenAICompatibleProvider:
 
         response = self.client.chat.completions.create(**kwargs)
         message = response.choices[0].message
+        usage = getattr(response, "usage", None)
+        prompt_details = getattr(usage, "prompt_tokens_details", None)
+        completion_details = getattr(usage, "completion_tokens_details", None)
         parsed_calls = []
         for call in message.tool_calls or []:
             try:
@@ -61,4 +95,14 @@ class OpenAICompatibleProvider:
             model_id=profile.id,
             provider=profile.provider,
             tool_calls=tuple(parsed_calls),
+            usage=TokenUsage(
+                input_tokens=int(getattr(usage, "prompt_tokens", 0) or 0),
+                output_tokens=int(getattr(usage, "completion_tokens", 0) or 0),
+                cached_input_tokens=int(
+                    getattr(prompt_details, "cached_tokens", 0) or 0
+                ),
+                reasoning_tokens=int(
+                    getattr(completion_details, "reasoning_tokens", 0) or 0
+                ),
+            ),
         )

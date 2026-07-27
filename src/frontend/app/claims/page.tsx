@@ -73,6 +73,9 @@ export default function ClaimsPage() {
                   <option value="DOCUMENTS_PENDING">Documents pending</option>
                   <option value="READY_FOR_REVIEW">Ready for review</option>
                   <option value="UNDER_REVIEW">Under review</option>
+                  <option value="READY_FOR_DECISION">Ready for decision</option>
+                  <option value="NEEDS_INFORMATION">Needs information</option>
+                  <option value="EXPERT_REVIEW_REQUIRED">Expert review required</option>
                 </select>
               </label>
             </div>
@@ -82,7 +85,7 @@ export default function ClaimsPage() {
             {!loading && !error ? (
               <div className="claimsTableWrap">
                 <table className="claimsTable">
-                  <thead><tr><th>Case</th><th>Product</th><th>Incident</th><th>Policy evidence</th><th>Status</th><th /></tr></thead>
+                  <thead><tr><th>Case</th><th>Product</th><th>Incident</th><th>Policy</th><th>Status</th><th /></tr></thead>
                   <tbody>
                     {visibleClaims.map((claim) => (
                       <tr key={claim.id}>

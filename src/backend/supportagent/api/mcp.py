@@ -1,4 +1,5 @@
 import json
+from hashlib import sha256
 from typing import Any
 
 from fastapi import Depends, HTTPException
@@ -11,6 +12,9 @@ from supportagent.mcp_client.client import MultiServerMCPClient
 from supportagent.mcp_client.config import local_mcp_configs
 from supportagent.mcp_client.store import (
     add_audit_log,
+    abandon_idempotency_key,
+    claim_idempotency_key,
+    complete_idempotency_key,
     inject_user_credentials,
     list_audit_logs,
     list_mcp_servers,
@@ -30,6 +34,28 @@ class McpToolCallRequest(BaseModel):
     question: str | None = None
 
 
+_CALENDAR_WRITE_TOOLS = {
+    "create_calendar_event",
+    "create_default_calendar_event",
+}
+
+
+def _calendar_idempotency_key(request: McpToolCallRequest) -> str | None:
+    if request.server != "teams_mcp" or request.tool not in _CALENDAR_WRITE_TOOLS:
+        return None
+    arguments = request.arguments
+    identity = {
+        "tool": request.tool,
+        "calendar_id": arguments.get("calendar_id", "default"),
+        "subject": str(arguments.get("subject", "")).strip().casefold(),
+        "start_time": arguments.get("start_time"),
+        "end_time": arguments.get("end_time"),
+        "timezone": arguments.get("timezone", "W. Europe Standard Time"),
+    }
+    encoded = json.dumps(identity, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return f"supportagent-{sha256(encoded.encode('utf-8')).hexdigest()}"
+
+
 class McpToolsResponse(BaseModel):
     tools: list[dict[str, Any]]
 
@@ -38,6 +64,7 @@ class McpToolCallResponse(BaseModel):
     server: str
     tool: str
     result: Any
+    replayed: bool = False
 
 
 class McpServersResponse(BaseModel):
@@ -199,6 +226,13 @@ _NOISY_RESULT_KEYS = {
     "recurrence",
     "importance",
     "isDraft",
+    "body",
+    "organizer",
+    "responseStatus",
+    "hideAttendees",
+    "attendees",
+    "locations",
+    "extensions",
 }
 _PRIORITY_RESULT_KEYS = ("subject", "displayName", "name", "start", "end", "location", "webLink", "bodyPreview")
 
@@ -256,11 +290,41 @@ async def mcp_call(
         )
         raise HTTPException(status_code=403, detail=block_reason)
 
+    idempotency_key = _calendar_idempotency_key(request)
+    if idempotency_key:
+        claim = claim_idempotency_key(
+            user_id=user.id,
+            server_name=request.server,
+            tool_name=request.tool,
+            idempotency_key=idempotency_key,
+        )
+        if claim.status == "replay":
+            return McpToolCallResponse(
+                server=request.server,
+                tool=request.tool,
+                result=claim.result or "",
+                replayed=True,
+            )
+        if claim.status == "in_progress":
+            raise HTTPException(
+                status_code=409,
+                detail="An identical calendar action is already being processed.",
+            )
+
     arguments = inject_user_credentials(user.id, request.server, request.arguments)
+    if idempotency_key:
+        arguments["transaction_id"] = idempotency_key
     client = MultiServerMCPClient(local_mcp_configs([request.server]))
     try:
         result = await client.call_tool(request.server, request.tool, arguments)
     except Exception as error:
+        if idempotency_key:
+            abandon_idempotency_key(
+                user_id=user.id,
+                server_name=request.server,
+                tool_name=request.tool,
+                idempotency_key=idempotency_key,
+            )
         detail = _format_mcp_error(error)
         add_audit_log(
             user_id=user.id,
@@ -271,6 +335,15 @@ async def mcp_call(
             error=detail,
         )
         raise HTTPException(status_code=400, detail=f"MCP tool call failed: {detail}") from error
+
+    if idempotency_key:
+        complete_idempotency_key(
+            user_id=user.id,
+            server_name=request.server,
+            tool_name=request.tool,
+            idempotency_key=idempotency_key,
+            result=result,
+        )
 
     add_audit_log(
         user_id=user.id,

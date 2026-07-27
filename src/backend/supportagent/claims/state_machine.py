@@ -2,23 +2,30 @@ from supportagent.claims.schemas import ActionStatus, ActionType, ClaimStatus
 
 
 CLAIM_TRANSITIONS: dict[ClaimStatus, set[ClaimStatus]] = {
-    "DRAFT": {"DOCUMENTS_PENDING"},
+    "DRAFT": {"DOCUMENTS_PENDING", "READY_FOR_REVIEW"},
     "DOCUMENTS_PENDING": {"READY_FOR_REVIEW"},
     "READY_FOR_REVIEW": {"UNDER_REVIEW", "NEEDS_INFORMATION"},
-    "UNDER_REVIEW": {"NEEDS_INFORMATION"},
+    "UNDER_REVIEW": {"READY_FOR_REVIEW", "NEEDS_INFORMATION", "READY_FOR_DECISION"},
     "NEEDS_INFORMATION": {"DOCUMENTS_PENDING", "READY_FOR_REVIEW"},
+    "READY_FOR_DECISION": {
+        "NEEDS_INFORMATION",
+        "EXPERT_REVIEW_REQUIRED",
+        "APPROVED",
+        "REJECTED",
+    },
+    "EXPERT_REVIEW_REQUIRED": {"UNDER_REVIEW", "READY_FOR_DECISION"},
     "APPROVED": {"CLOSED"},
     "REJECTED": {"CLOSED"},
     "CLOSED": set(),
 }
 
-TERMINAL_DECISION_STATES: set[ClaimStatus] = {"APPROVED", "REJECTED", "CLOSED"}
+OUT_OF_SCOPE_STATES: set[ClaimStatus] = {"CLOSED"}
 
 
 def validate_claim_transition(current: ClaimStatus, target: ClaimStatus) -> None:
     if target not in CLAIM_TRANSITIONS[current]:
         raise ValueError(f"Claim status transition {current} -> {target} is not allowed.")
-    if target in TERMINAL_DECISION_STATES:
+    if target in OUT_OF_SCOPE_STATES:
         raise ValueError(f"Claim status {target} is outside the v0.1 execution scope.")
 
 

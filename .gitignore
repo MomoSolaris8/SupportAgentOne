@@ -204,6 +204,7 @@ pip-delete-this-directory.txt
 
 # Unit test / coverage reports
 htmlcov/
+artifacts/evals/
 .tox/
 .nox/
 .coverage
@@ -339,6 +340,10 @@ pyrightconfig.json
 
 # Secrets
 .env
+evals/model_pricing.local.json
+
+# Local presentation exports
+*.pptx
 
 # Local coding-agent instructions
 AGENTS.md

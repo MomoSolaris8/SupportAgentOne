@@ -173,7 +173,26 @@ python scripts/seed_claim_demo.py --owner-email you@example.com --yes
 ```
 
 The script refuses to create data without `--yes` and never reassigns an
-existing synthetic claim to another user.
+existing synthetic claim to another user. Seeded document records are
+metadata-only fixtures (`extracted_fields.synthetic = true`); they do not
+pretend to contain downloadable PDF or image binaries. The Claims Desk shows
+that distinction and exposes a file link only for records associated with a
+real `uploaded_file_id`.
+
+The Claims Desk uses two separate state models:
+
+- claim lifecycle: `DRAFT` → `DOCUMENTS_PENDING`/`READY_FOR_REVIEW` →
+  `UNDER_REVIEW` → `NEEDS_INFORMATION`/`READY_FOR_DECISION` →
+  `APPROVED`/`REJECTED`
+- review execution: `QUEUED` → `RUNNING` → `SUCCEEDED`/`FAILED`
+
+Submitting a draft performs deterministic document validation. Starting a
+review creates a persisted run, records each workflow step, stores the
+evidence-backed result, advances the claim lifecycle, and exposes the history
+in the case audit timeline. Approval and rejection are never selected by the
+LLM: an authenticated human must confirm either terminal decision, and a
+rejection requires a reason. The actor, decision, reason, and lifecycle
+transition are persisted in the audit trail.
 
 ## Container startup
 
@@ -198,6 +217,21 @@ and uses the same pgvector Postgres service.
 The project includes local, enumerable MCP server examples under
 `supportagent/mcp_servers/`. They are intended as interview-friendly reference
 servers, not default remote third-party proxies.
+
+### Multilingual time MCP
+
+`time_mcp` exposes a read-only `get_current_time` tool backed by Python's IANA
+timezone database. The dynamic tool agent uses it for live time questions and
+answers in the language of the request:
+
+```text
+Wie spät ist es in Zürich?  -> German
+What time is it in Zurich?  -> English
+苏黎世现在几点了？             -> Chinese
+```
+
+The frontend enables this safe read-only server by default. The model formats
+the answer, while the MCP tool remains the source of truth for the current time.
 
 ### Microsoft Teams / Graph MCP
 
@@ -323,6 +357,29 @@ evidence checks, or a LangGraph workflow.
 
 ### Evaluation
 
+The default evaluation is deterministic, requires no external API keys, and
+executes the production claim document and approval rules against the versioned
+JSONL dataset:
+
+```bash
+python -m supportagent.evaluation
+```
+
+It writes a machine-readable report to
+`artifacts/evals/claim-review-latest.json`, prints the metric thresholds, and
+returns a non-zero exit code when a regression is detected. GitHub Actions runs
+the same command and uploads the JSON report as the
+`claim-review-evaluation` artifact.
+
+The initial gated metrics are:
+
+- claim case pass rate;
+- missing-document exact-match rate;
+- proposed-action exact-match rate;
+- forbidden write-action execution rate.
+
+The legacy live RAG check remains available:
+
 ```bash
 python -m supportagent.eval
 ```
@@ -330,7 +387,76 @@ python -m supportagent.eval
 Runs a small set of German questions (`eval_questions.py`) covering
 single-source retrieval, multi-source synthesis, conflicting sources,
 terminology robustness, and controlled refusal, and prints a pass/fail
-report against the live pipeline.
+report against the live retrieval/generation pipeline. It requires indexed
+pgvector data and real embedding/chat credentials, is not deterministic, and
+is therefore not a CI gate.
+
+### Online RAG / LLM benchmark
+
+The online benchmark compares allowlisted Qwen, Kimi, and Claude models against
+the same versioned RAG dataset and the same production `answer_with_agent()`
+workflow. MCP tools and skills are disabled for this suite so that model
+selection is the only intended variable.
+
+Start with two cases and one trial per model:
+
+```bash
+python -m supportagent.evaluation.online_runner \
+  --models qwen3-max,kimi-k2.6,claude-sonnet-4 \
+  --cases household-standard-coverage,weather-out-of-domain-refusal \
+  --trials 1 \
+  --confirm-live
+```
+
+After the smoke run succeeds, run the interview benchmark with three trials:
+
+```bash
+python -m supportagent.evaluation.online_runner \
+  --models qwen3-max,kimi-k2.6,claude-sonnet-4 \
+  --trials 3 \
+  --min-pass-rate 0.75 \
+  --confirm-live
+```
+
+This executes 72 RAG requests (8 cases x 3 models x 3 trials), uses real
+provider APIs, and may incur charges. It is intentionally excluded from CI.
+The command writes both JSON and Markdown reports under `artifacts/evals/`.
+
+The comparison reports:
+
+- deterministic quality pass rate;
+- expected-source recall;
+- controlled-refusal accuracy;
+- citation validity and response-language accuracy;
+- stability across repeated trials and provider error rate;
+- end-to-end p50/p95 latency and accumulated LLM latency;
+- input, output, cached-input, and reasoning tokens;
+- estimated cost when a dated pricing catalog covers every model call.
+
+Token counts come from the provider response instead of a local tokenizer.
+End-to-end latency includes retrieval and generation. Embedding requests are
+therefore included in wall-clock latency, but their tokens and cost are not yet
+included in the chat-token totals.
+
+Pricing is deliberately separate from the recorded usage because provider
+prices vary by region, account, model tier, and date. Copy
+`evals/model_pricing.example.json` to the ignored
+`evals/model_pricing.local.json`, add the current official Qwen and Kimi prices
+for the configured account, and run:
+
+```bash
+python -m supportagent.evaluation.online_runner \
+  --models qwen3-max,kimi-k2.6,claude-sonnet-4 \
+  --trials 3 \
+  --pricing evals/model_pricing.local.json \
+  --confirm-live
+```
+
+The benchmark is a reproducible project comparison, not a universal model
+leaderboard. Keep the prompt, indexed corpus, dataset, model ids, provider
+region, and trial count fixed when comparing runs. The first quality gate uses
+deterministic RAG checks; semantic correctness and groundedness judging are a
+separate evaluation layer rather than being silently mixed into this score.
 
 ## Frontend
 

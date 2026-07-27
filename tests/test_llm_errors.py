@@ -15,7 +15,8 @@ from supportagent.llm.errors import (
     LLMTimeoutError,
     map_provider_error,
 )
-from supportagent.llm.schemas import ModelProfile
+from supportagent.llm.schemas import ChatCompletion, ModelProfile, TokenUsage
+from supportagent.llm.usage import capture_llm_usage
 
 
 class ProviderError(Exception):
@@ -62,6 +63,37 @@ def test_complete_chat_maps_provider_sdk_errors(monkeypatch):
 
     assert captured.value.provider == "kimi"
     assert captured.value.model == "kimi-k2.6"
+
+
+def test_complete_chat_records_model_latency_and_token_usage(monkeypatch):
+    profile = ModelProfile(
+        id="qwen3-max",
+        label="Qwen3 Max",
+        provider="qwen",
+        provider_model="qwen3-max",
+        capabilities=frozenset({"text"}),
+    )
+
+    class Provider:
+        def complete(self, *args, **kwargs):
+            return ChatCompletion(
+                content="answer",
+                model_id=profile.id,
+                provider=profile.provider,
+                usage=TokenUsage(input_tokens=80, output_tokens=20),
+            )
+
+    monkeypatch.setattr(llm_service, "resolve_model", lambda *args, **kwargs: profile)
+    monkeypatch.setattr(llm_service, "_provider", lambda provider: Provider())
+
+    with capture_llm_usage() as calls:
+        llm_service.complete_chat([{"role": "user", "content": "Hello"}])
+
+    assert len(calls) == 1
+    assert calls[0].model_id == "qwen3-max"
+    assert calls[0].usage.input_tokens == 80
+    assert calls[0].usage.output_tokens == 20
+    assert calls[0].latency_ms >= 0
 
 
 def test_api_handler_returns_safe_stable_error_contract():

@@ -4,6 +4,8 @@ export type ClaimStatus =
   | "READY_FOR_REVIEW"
   | "UNDER_REVIEW"
   | "NEEDS_INFORMATION"
+  | "READY_FOR_DECISION"
+  | "EXPERT_REVIEW_REQUIRED"
   | "APPROVED"
   | "REJECTED"
   | "CLOSED";
@@ -24,6 +26,7 @@ export type Claim = {
 
 export type ClaimDocument = {
   id: string;
+  uploaded_file_id: string | null;
   document_type: string;
   filename: string;
   extraction_status: string;
@@ -53,6 +56,8 @@ export type ClaimDetail = {
   claim: Claim;
   documents: ClaimDocument[];
   proposed_actions: ProposedAction[];
+  latest_review_run: ClaimReviewRun | null;
+  audit_events: ClaimAuditEvent[];
 };
 
 export type DocumentRequirement = {
@@ -78,6 +83,32 @@ export type ClaimReview = {
   evidence: Array<{ source_id: string; title: string; url: string; source: string }>;
   recommendation: string;
   proposed_action: ProposedAction | null;
+};
+
+export type ClaimReviewRun = {
+  id: string;
+  claim_id: string;
+  status: "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED";
+  current_step: string;
+  result: ClaimReview | null;
+  error: string | null;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+};
+
+export type ClaimAuditEvent = {
+  id: number;
+  event_type: string;
+  payload: Record<string, unknown>;
+  actor_user_id: string;
+  created_at: string;
+};
+
+export type ClaimSubmission = {
+  claim: Claim;
+  present_documents: string[];
+  missing_documents: string[];
 };
 
 export async function readApiError(response: Response) {

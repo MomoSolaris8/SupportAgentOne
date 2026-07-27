@@ -38,6 +38,20 @@ jobs:
           MCP_DYNAMIC_TOOLS_ENABLED: "false"
         run: python -m pytest
 
+      - name: Run offline claim evaluation
+        run: |
+          python -m supportagent.evaluation \
+            --suite claim-review \
+            --output artifacts/evals/claim-review-ci.json
+
+      - name: Upload evaluation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: claim-review-evaluation
+          path: artifacts/evals/claim-review-ci.json
+          if-no-files-found: warn
+
   frontend:
     name: Frontend build
     runs-on: ubuntu-latest

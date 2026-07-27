@@ -137,6 +137,8 @@ body {
 .status-needs_information { background: #fff7e6; border-color: #f2cf8b; color: #915d00; }
 .status-ready_for_review { background: #e9f6ef; border-color: #aad7c0; color: #16663d; }
 .status-under_review { background: #eaf2fb; border-color: #b8d1ec; color: #225b91; }
+.status-ready_for_decision { background: #eef0ff; border-color: #c4c8f1; color: #4d55a5; }
+.status-expert_review_required { background: #fff2d8; border-color: #e8c278; color: #825300; }
 .status-approved { background: #e9f6ef; border-color: #aad7c0; color: #16663d; }
 .status-rejected { background: #fceced; border-color: #edb8bb; color: #9b3137; }
 .status-draft,
@@ -170,6 +172,24 @@ body {
 .documentList article div { display: grid; gap: 4px; }
 .documentList article strong { font-size: 12px; }
 .documentList article small { color: #71808c; font-size: 11px; }
+.documentList .documentMeta em {
+  color: #9a6700;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 700;
+}
+.documentList .documentControls {
+  justify-items: end;
+}
+.documentList .documentControls a {
+  color: #b45309;
+  font-size: 9px;
+  font-weight: 800;
+  text-decoration: none;
+}
+.documentList .documentControls small {
+  font-size: 9px;
+}
 .documentIcon { background: #edf1f4; border-radius: 4px; color: #52616d; font-size: 9px; font-weight: 900; padding: 8px 6px; }
 .extractionStatus { color: #16663d; font-size: 10px; font-weight: 900; text-transform: uppercase; }
 .evidenceBadge { border-radius: 999px; font-size: 10px; font-weight: 900; padding: 6px 9px; text-transform: uppercase; }
@@ -220,6 +240,384 @@ body {
 .inlineError { color: #9b3137 !important; font-weight: 700; }
 .claimDetailLoading { align-content: center; background: #f4f6f8; display: grid; gap: 8px; height: 100vh; justify-items: center; }
 .claimDetailLoading a { color: #b45309; font-weight: 800; }
+
+.claimSubmissionResult {
+  align-items: center;
+  background: #e9f6ef;
+  border: 1px solid #aad7c0;
+  border-radius: 6px;
+  color: #16663d;
+  display: flex;
+  gap: 11px;
+  padding: 12px 15px;
+}
+
+.claimSubmissionResult.pending {
+  background: #fff7e6;
+  border-color: #f2cf8b;
+  color: #915d00;
+}
+
+.claimSubmissionResult > div {
+  display: grid;
+  gap: 2px;
+}
+
+.claimSubmissionResult strong {
+  font-size: 12px;
+}
+
+.claimSubmissionResult span {
+  font-size: 10px;
+}
+
+.claimReviewProgress {
+  background: #f8f9fb;
+  border-bottom: 1px solid #e7ebee;
+  display: grid;
+  gap: 12px;
+  padding: 16px 20px;
+}
+
+.claimReviewProgress > header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.claimReviewProgress > header > div {
+  display: grid;
+  gap: 2px;
+}
+
+.claimReviewProgress > header span,
+.claimReviewProgress > header em {
+  color: #71808c;
+  font-size: 9px;
+  font-style: normal;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.claimReviewProgress > header strong {
+  font-size: 13px;
+}
+
+.claimReviewProgress ol {
+  display: grid;
+  gap: 7px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.claimReviewProgress li {
+  align-items: center;
+  color: #8b98a2;
+  display: flex;
+  font-size: 11px;
+  gap: 8px;
+}
+
+.claimReviewProgress li.complete {
+  color: #287a54;
+}
+
+.claimReviewProgress li.active {
+  color: #4d55a5;
+  font-weight: 750;
+}
+
+.claimReviewProgress.failed {
+  background: #fff1f1;
+}
+
+.claimReviewProgress.failed > header strong,
+.claimReviewProgress.failed > p {
+  color: #9b3137;
+}
+
+.claimReviewProgress > p,
+.claimReviewProgress > small {
+  font-size: 9px;
+  margin: 0;
+}
+
+.claimReviewProgress > small {
+  color: #8b98a2;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+.claimNextStepCard {
+  display: grid;
+  gap: 9px;
+  padding: 17px 18px;
+}
+
+.claimNextStepCard > span {
+  color: #4d55a5;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.claimNextStepCard h3,
+.claimNextStepCard p {
+  margin: 0;
+}
+
+.claimNextStepCard h3 {
+  font-size: 14px;
+}
+
+.claimNextStepCard p {
+  color: #52616d;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.claimNextStepCard button {
+  background: white;
+  border: 1px solid #cad2d9;
+  border-radius: 5px;
+  color: #52616d;
+  font-size: 10px;
+  font-weight: 800;
+  min-height: 34px;
+}
+
+.claimNextStepCard button.primary {
+  background: #4d55a5;
+  border-color: #4d55a5;
+  color: white;
+}
+
+.claimNextStepCard button.approveDecision {
+  background: #287a54;
+  border-color: #287a54;
+  color: white;
+}
+
+.claimNextStepCard button.rejectDecision {
+  border-color: #cf747a;
+  color: #9b3137;
+}
+
+.claimNextStepCard button:disabled {
+  cursor: wait;
+  opacity: .55;
+}
+
+.decisionDivider {
+  align-items: center;
+  color: #82909b;
+  display: flex;
+  font-size: 8px;
+  gap: 8px;
+  margin: 3px 0;
+  text-transform: uppercase;
+}
+
+.decisionDivider::before,
+.decisionDivider::after {
+  background: #e7ebee;
+  content: "";
+  flex: 1;
+  height: 1px;
+}
+
+.claimFinalDecision {
+  background: #f7f8f9;
+  display: grid;
+  gap: 7px;
+  padding: 18px;
+}
+
+.claimFinalDecision span {
+  color: #687784;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.claimFinalDecision strong {
+  font-size: 15px;
+}
+
+.claimFinalDecision p {
+  color: #52616d;
+  font-size: 10px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.claimFinalDecision.approved strong {
+  color: #16663d;
+}
+
+.claimFinalDecision.rejected strong {
+  color: #9b3137;
+}
+
+.claimDecisionOverlay {
+  align-items: center;
+  background: rgba(22, 33, 43, .48);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 20px;
+  position: fixed;
+  z-index: 100;
+}
+
+.claimDecisionDialog {
+  background: white;
+  border: 1px solid #dfe4e8;
+  border-radius: 9px;
+  box-shadow: 0 24px 70px rgba(22, 33, 43, .24);
+  display: grid;
+  gap: 12px;
+  max-width: 460px;
+  padding: 22px;
+  width: 100%;
+}
+
+.claimDecisionDialog > span {
+  color: #4d55a5;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+}
+
+.claimDecisionDialog h2,
+.claimDecisionDialog p {
+  margin: 0;
+}
+
+.claimDecisionDialog h2 {
+  font-size: 18px;
+}
+
+.claimDecisionDialog p {
+  color: #52616d;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.claimDecisionDialog label {
+  color: #52616d;
+  display: grid;
+  font-size: 10px;
+  font-weight: 800;
+  gap: 6px;
+}
+
+.claimDecisionDialog textarea {
+  border: 1px solid #cad2d9;
+  border-radius: 6px;
+  color: #263442;
+  font: inherit;
+  line-height: 1.5;
+  min-height: 100px;
+  padding: 10px;
+  resize: vertical;
+}
+
+.claimDecisionDialog > div {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.claimDecisionDialog button {
+  border: 1px solid transparent;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 800;
+  min-height: 36px;
+  padding: 0 13px;
+}
+
+.claimDecisionDialog button.cancel {
+  background: white;
+  border-color: #cad2d9;
+  color: #52616d;
+}
+
+.claimDecisionDialog button.confirmApprove {
+  background: #287a54;
+  color: white;
+}
+
+.claimDecisionDialog button.confirmReject {
+  background: #9b3137;
+  color: white;
+}
+
+.claimDecisionDialog button:disabled {
+  cursor: not-allowed;
+  opacity: .5;
+}
+
+.claimAuditPanel {
+  overflow: hidden;
+}
+
+.claimAuditTimeline {
+  display: grid;
+  padding: 5px 20px 13px;
+}
+
+.claimAuditTimeline article {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 12px minmax(0, 1fr);
+  padding: 10px 0;
+  position: relative;
+}
+
+.claimAuditTimeline article::before {
+  background: #dfe4e8;
+  content: "";
+  left: 4px;
+  position: absolute;
+  top: 21px;
+  bottom: -10px;
+  width: 1px;
+}
+
+.claimAuditTimeline article:last-of-type::before {
+  display: none;
+}
+
+.claimAuditTimeline i {
+  background: #4d55a5;
+  border: 3px solid #eef0ff;
+  border-radius: 50%;
+  height: 9px;
+  margin-top: 3px;
+  width: 9px;
+  z-index: 1;
+}
+
+.claimAuditTimeline article > div {
+  display: grid;
+  gap: 2px;
+}
+
+.claimAuditTimeline strong {
+  font-size: 11px;
+}
+
+.claimAuditTimeline span,
+.claimAuditTimeline p {
+  color: #71808c;
+  font-size: 9px;
+  margin: 0;
+}
 
 @media (max-width: 1000px) {
   .claimsShell { grid-template-columns: 190px minmax(0, 1fr); }
@@ -605,6 +1003,47 @@ h1 {
 .topbar h2 {
   font-size: 22px;
   margin: 0;
+}
+
+.topbarActions {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.languageSwitcher {
+  align-items: center;
+  background: #f4f5f6;
+  border: 1px solid #d9dee2;
+  border-radius: 7px;
+  display: inline-flex;
+  padding: 2px;
+}
+
+.languageSwitcher button {
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  color: #687784;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  min-height: 27px;
+  min-width: 32px;
+  padding: 0 7px;
+}
+
+.languageSwitcher button.active {
+  background: white;
+  box-shadow: 0 1px 3px rgba(26, 35, 43, .12);
+  color: #263442;
+}
+
+.languageSwitcher.compact button {
+  min-height: 23px;
+  min-width: 25px;
+  padding: 0 4px;
 }
 
 .statusBadge {
@@ -1774,6 +2213,25 @@ details a {
   overflow: hidden;
 }
 
+.opsShell.theme-dark {
+  --ops-bg: #111315;
+  --ops-panel: #191c1f;
+  --ops-line: #2a2e32;
+  --ops-line-strong: #3a3f45;
+  --ops-ink: #eceeea;
+  --ops-muted: #a7aba5;
+  --ops-faint: #737872;
+  --ops-accent: #9aa4ff;
+  --ops-accent-soft: #252a43;
+  --ops-good: #6fc69a;
+  --ops-good-soft: #193327;
+  --ops-warn: #e4bd65;
+  --ops-warn-soft: #382f18;
+  --ops-bad: #ee8c82;
+  --ops-bad-soft: #3b211f;
+  color-scheme: dark;
+}
+
 .opsShell.assistantClosed {
   grid-template-columns: 208px minmax(0, 1fr);
 }
@@ -1790,14 +2248,68 @@ details a {
 }
 
 .opsBrand {
-  align-items: center;
+  align-items: start;
   display: grid;
-  gap: 10px;
-  grid-template-columns: 34px minmax(0, 1fr) auto;
+  gap: 10px 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
   padding: 0 8px 16px;
 }
 
-.opsBrand > span {
+.opsBrandControls {
+  align-items: center;
+  display: grid;
+  gap: 6px;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.opsBrandControls .languageSwitcher {
+  background: var(--ops-panel);
+  border-color: var(--ops-line);
+  justify-self: stretch;
+}
+
+.opsBrandControls .languageSwitcher button {
+  color: var(--ops-muted);
+  flex: 1;
+}
+
+.opsBrandControls .languageSwitcher button.active {
+  background: var(--ops-bg);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .12);
+  color: var(--ops-ink);
+}
+
+.opsThemeButton {
+  align-items: center;
+  background: var(--ops-panel);
+  border: 1px solid var(--ops-line);
+  border-radius: 7px;
+  color: var(--ops-muted);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 9px;
+  font-weight: 700;
+  gap: 5px;
+  justify-content: center;
+  min-height: 29px;
+  padding: 0 8px;
+}
+
+.opsThemeButton:hover {
+  border-color: var(--ops-line-strong);
+  color: var(--ops-ink);
+}
+
+.opsBrandMain {
+  align-items: center;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 34px minmax(0, 1fr);
+  min-width: 0;
+}
+
+.opsBrandMain > span {
   align-items: center;
   background: var(--ops-ink);
   border-radius: 7px;
@@ -1810,14 +2322,17 @@ details a {
   width: 34px;
 }
 
-.opsBrand div {
+.opsBrandIdentity {
   display: grid;
   gap: 1px;
+  min-width: 0;
 }
 
 .opsBrand strong {
   font-size: 14px;
   font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .opsBrand small {
@@ -1899,10 +2414,86 @@ details a {
   color: var(--ops-accent);
 }
 
+.opsSidebarChats {
+  border-top: 1px solid var(--ops-line);
+  display: grid;
+  gap: 6px;
+  margin: 12px 8px 0;
+  padding-top: 12px;
+}
+
+.opsSidebarChats header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.opsSidebarChats header > span {
+  color: var(--ops-faint);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.opsSidebarChats header button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--ops-accent);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 9px;
+  font-weight: 700;
+  gap: 3px;
+  padding: 0;
+  text-decoration: none;
+}
+
+.opsSidebarChats > div {
+  display: grid;
+  gap: 2px;
+}
+
+.opsSidebarChats > div > button {
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  color: var(--ops-muted);
+  cursor: pointer;
+  display: grid;
+  gap: 2px;
+  padding: 6px 7px;
+  text-align: left;
+  text-decoration: none;
+  width: 100%;
+}
+
+.opsSidebarChats > div > button:hover,
+.opsSidebarChats > div > button.active {
+  background: var(--ops-panel);
+  color: var(--ops-ink);
+}
+
+.opsSidebarChats > div span {
+  font-size: 10px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.opsSidebarChats > div small,
+.opsSidebarChats > div p {
+  color: var(--ops-faint);
+  font-size: 8px;
+  margin: 0;
+}
+
 .opsControlBoundary {
   align-items: flex-start;
   background: var(--ops-good-soft);
-  border: 1px solid #cbe2d5;
+  border: 1px solid color-mix(in srgb, var(--ops-good) 35%, var(--ops-line));
   border-radius: 7px;
   color: var(--ops-good);
   display: flex;
@@ -1927,7 +2518,7 @@ details a {
 }
 
 .opsControlBoundary p {
-  color: #52715f;
+  color: color-mix(in srgb, var(--ops-good) 65%, var(--ops-muted));
   font-size: 9px;
   line-height: 1.4;
   margin: 0;
@@ -2088,10 +2679,11 @@ details a {
 .opsAssistant {
   background: var(--ops-bg);
   border-left: 1px solid var(--ops-line);
-  display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto auto;
+  display: flex;
+  flex-direction: column;
   height: 100vh;
   min-width: 0;
+  overflow: hidden;
 }
 
 .opsAssistantHeader {
@@ -2169,6 +2761,7 @@ details a {
 .opsAssistantLog {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
   gap: 9px;
   min-height: 0;
   overflow-y: auto;
@@ -2227,6 +2820,51 @@ details a {
   color: var(--ops-bad);
 }
 
+.opsMessageHeader {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+}
+
+.opsMessageHeader > span {
+  color: var(--ops-faint);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.opsMessageHeader > div {
+  align-items: center;
+  display: flex;
+  gap: 2px;
+}
+
+.opsMessageHeader button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  color: var(--ops-faint);
+  cursor: pointer;
+  display: flex;
+  font-size: 7px;
+  justify-content: center;
+  min-height: 20px;
+  min-width: 20px;
+  padding: 0 4px;
+}
+
+.opsMessageHeader button:hover {
+  background: rgba(128, 128, 128, .1);
+  color: var(--ops-ink);
+}
+
+.opsAssistantMessage.user .opsMessageHeader > span,
+.opsAssistantMessage.user .opsMessageHeader button {
+  color: rgba(255, 255, 255, .72);
+}
+
 .opsAssistantMessage > span {
   color: var(--ops-faint);
   font-size: 8px;
@@ -2256,13 +2894,184 @@ details a {
   color: var(--ops-muted);
 }
 
+.opsActionCard {
+  background: var(--ops-panel);
+  border: 1px solid var(--ops-line-strong);
+  border-radius: 7px;
+  display: grid;
+  gap: 9px;
+  margin-top: 4px;
+  min-width: 250px;
+  overflow: hidden;
+  padding: 10px;
+}
+
+.opsActionCard > header {
+  align-items: center;
+  border-bottom: 1px solid var(--ops-line);
+  display: flex;
+  justify-content: space-between;
+  padding-bottom: 8px;
+}
+
+.opsActionCard > header > div {
+  display: grid;
+  gap: 1px;
+}
+
+.opsActionCard > header span {
+  color: var(--ops-faint);
+  font-size: 7px;
+  font-weight: 750;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.opsActionCard > header strong {
+  color: var(--ops-ink);
+  font-size: 11px;
+}
+
+.opsActionCard > header em {
+  background: var(--ops-warn-soft);
+  border-radius: 99px;
+  color: var(--ops-warn);
+  font-size: 7px;
+  font-style: normal;
+  font-weight: 750;
+  padding: 4px 6px;
+  text-transform: uppercase;
+}
+
+.opsActionCard.done > header em {
+  background: var(--ops-good-soft);
+  color: var(--ops-good);
+}
+
+.opsActionCard dl {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.opsActionForm {
+  display: grid;
+  gap: 8px;
+}
+
+.opsActionForm label {
+  color: var(--ops-faint);
+  display: grid;
+  font-size: 8px;
+  font-weight: 700;
+  gap: 4px;
+  text-transform: uppercase;
+}
+
+.opsActionForm input,
+.opsActionForm textarea {
+  background: var(--ops-panel);
+  border: 1px solid var(--ops-line-strong);
+  border-radius: 5px;
+  color: var(--ops-ink);
+  font: inherit;
+  font-size: 10px;
+  outline: none;
+  padding: 7px 8px;
+  text-transform: none;
+  width: 100%;
+}
+
+.opsActionForm input:focus,
+.opsActionForm textarea:focus {
+  border-color: var(--ops-accent);
+  box-shadow: 0 0 0 2px var(--ops-accent-soft);
+}
+
+.opsActionDateTime {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: 1.35fr 1fr 1fr;
+}
+
+.opsActionCard dl > div {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 54px minmax(0, 1fr);
+}
+
+.opsActionCard dt {
+  color: var(--ops-faint);
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.opsActionCard dd {
+  color: var(--ops-ink);
+  font-size: 10px;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.opsActionButtons {
+  display: flex;
+  gap: 6px;
+}
+
+.opsActionButtons button,
+.opsActionCard > a {
+  background: var(--ops-panel);
+  border: 1px solid var(--ops-line-strong);
+  border-radius: 5px;
+  color: var(--ops-muted);
+  cursor: pointer;
+  font-size: 9px;
+  font-weight: 700;
+  min-height: 29px;
+  padding: 0 9px;
+  text-decoration: none;
+}
+
+.opsActionButtons button.primary {
+  background: var(--ops-accent);
+  border-color: var(--ops-accent);
+  color: white;
+}
+
+.opsActionButtons button:disabled {
+  cursor: not-allowed;
+  opacity: .45;
+}
+
+.opsActionCard > a {
+  align-items: center;
+  display: inline-flex;
+  justify-content: center;
+}
+
+.opsActionCard .opsActionHint {
+  background: var(--ops-warn-soft);
+  border-radius: 5px;
+  color: var(--ops-warn);
+  font-size: 8px;
+  line-height: 1.4;
+  padding: 6px 7px;
+}
+
+.opsActionCard .opsActionMissing {
+  color: var(--ops-bad);
+  font-size: 8px;
+  line-height: 1.4;
+}
+
 .opsAssistantComposer {
   align-items: end;
-  border-top: 1px solid var(--ops-line);
   display: grid;
+  flex: 0 0 auto;
   gap: 7px;
   grid-template-columns: minmax(0, 1fr) 34px;
-  padding: 12px 14px 8px;
+  padding: 6px 14px 12px;
 }
 
 .opsAssistantComposer textarea {
@@ -2272,10 +3081,13 @@ details a {
   color: var(--ops-ink);
   font-size: 11px;
   line-height: 1.4;
-  min-height: 58px;
+  max-height: min(48vh, 420px);
+  min-height: 72px;
+  min-width: 0;
   outline: none;
+  overflow-y: hidden;
   padding: 9px 10px;
-  resize: none;
+  resize: vertical;
   width: 100%;
 }
 
@@ -2300,32 +3112,84 @@ details a {
   cursor: default;
 }
 
-.opsAssistantFooter {
-  align-items: center;
-  color: var(--ops-faint);
+.opsComposerTools {
   display: flex;
-  font-size: 8px;
-  gap: 8px;
-  justify-content: space-between;
-  padding: 0 14px 11px;
+  flex-wrap: wrap;
+  gap: 12px;
+  grid-column: 1 / -1;
 }
 
-.opsAssistantFooter > div {
+.opsComposerTools button {
   align-items: center;
-  display: flex;
-  gap: 5px;
+  background: transparent;
+  border: 0;
+  color: var(--ops-muted);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 8px;
+  font-weight: 700;
+  gap: 4px;
+  height: auto;
+  min-height: auto;
+  padding: 2px 0;
+  width: auto;
+}
+
+.opsComposerTools button:hover {
+  color: var(--ops-accent);
+}
+
+.opsComposerTools button:disabled {
+  background: transparent;
+  color: var(--ops-faint);
+  cursor: not-allowed;
+  opacity: .55;
+}
+
+.opsAssistantFooter {
+  border-top: 1px solid var(--ops-line);
+  color: var(--ops-faint);
+  display: grid;
+  flex: 0 0 auto;
+  font-size: 8px;
+  gap: 7px;
+  padding: 10px 14px 2px;
+}
+
+.opsAssistantModel {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: auto minmax(0, 1fr);
   min-width: 0;
 }
 
-.opsAssistantFooter select {
+.opsAssistantModel > span {
+  color: var(--ops-muted);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  white-space: nowrap;
+}
+
+.opsAssistantModel select {
   background: var(--ops-panel);
   border: 1px solid var(--ops-line);
   border-radius: 4px;
   color: var(--ops-muted);
   font: inherit;
-  max-width: 145px;
+  max-width: none;
+  min-width: 0;
   min-height: 24px;
   padding: 2px 22px 2px 6px;
+  width: 100%;
+}
+
+.opsAssistantGuardrail {
+  align-items: center;
+  display: flex;
+  gap: 5px;
+  min-width: 0;
 }
 
 .srOnly {
@@ -2441,6 +3305,7 @@ details a {
 .opsWorkspace .claimsPanel,
 .opsWorkspace .claimActions,
 .opsWorkspace .caseSummary {
+  background: var(--ops-panel);
   border-color: var(--ops-line);
   border-radius: 8px;
   box-shadow: none;
@@ -2479,7 +3344,7 @@ details a {
 }
 
 .opsWorkspace .claimsTable th {
-  background: #fafaf9;
+  background: var(--ops-bg);
   color: var(--ops-faint);
   font-size: 8px;
   padding: 8px 12px;
@@ -2487,7 +3352,7 @@ details a {
 
 .opsWorkspace .claimsTable td {
   border-color: var(--ops-line);
-  color: #44443f;
+  color: var(--ops-ink);
   font-size: 10px;
   padding: 11px 12px;
 }
@@ -2508,6 +3373,7 @@ details a {
 }
 
 .opsWorkspace .claimsFilter select {
+  background: var(--ops-panel);
   border-color: var(--ops-line-strong);
   color: var(--ops-ink);
   font-size: 9px;
@@ -2572,7 +3438,7 @@ details a {
 }
 
 .opsWorkspace .recommendation {
-  background: #fafaf9;
+  background: var(--ops-bg);
   border-color: var(--ops-accent);
 }
 
@@ -2602,6 +3468,31 @@ details a {
 
 .opsWorkspace .decisionButtons button:first-child {
   background: var(--ops-good);
+}
+
+.opsWorkspace .decisionButtons .rejectButton {
+  background: var(--ops-panel);
+}
+
+.opsWorkspace .documentIcon,
+.opsWorkspace .docPill.conditional,
+.opsWorkspace .status-draft,
+.opsWorkspace .status-closed {
+  background: var(--ops-bg);
+  color: var(--ops-muted);
+}
+
+.opsWorkspace .evidenceList article,
+.opsWorkspace .documentList article,
+.opsWorkspace .actionCard {
+  border-color: var(--ops-line);
+}
+
+.opsWorkspace .actionCard dd,
+.opsWorkspace .recommendation p,
+.opsWorkspace .evidenceList article strong,
+.opsWorkspace .documentList article strong {
+  color: var(--ops-ink);
 }
 
 .opsWorkspace .reviewEmpty {
@@ -3226,12 +4117,12 @@ details a {
   width: 100%;
 }
 
-.opsAuthFormPanel > div:first-child {
+.opsAuthIntro {
   display: grid;
   gap: 5px;
 }
 
-.opsAuthFormPanel > div:first-child p {
+.opsAuthIntro p {
   color: #5e6ad2;
   font-size: 9px;
   font-weight: 700;
@@ -3246,7 +4137,7 @@ details a {
   margin: 0;
 }
 
-.opsAuthFormPanel > div:first-child span {
+.opsAuthIntro span {
   color: #71716b;
   font-size: 10px;
 }

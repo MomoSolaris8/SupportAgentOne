@@ -1,0 +1,13 @@
+{
+  "currency": "USD",
+  "effective_date": "2026-07-27",
+  "models": {
+    "claude-sonnet-4": {
+      "input_per_million": 3.0,
+      "output_per_million": 15.0,
+      "cached_input_per_million": 0.3,
+      "cache_creation_input_per_million": 3.75,
+      "source": "https://docs.anthropic.com/en/docs/about-claude/pricing"
+    }
+  }
+}
