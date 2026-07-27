@@ -30,6 +30,7 @@ READ_ONLY_TOOLS = {
     "list_folder_files",
     "list_chats",
     "get_weather",
+    "get_current_time",
 }
 
 

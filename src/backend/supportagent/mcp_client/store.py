@@ -31,7 +31,25 @@ class MCPAuditRecord:
     created_at: str
 
 
+@dataclass(frozen=True)
+class MCPIdempotencyClaim:
+    status: str
+    result: str | None = None
+
+
 DEFAULT_SERVER_ROWS = [
+    (
+        "time_mcp",
+        "Local timezone-aware time MCP server",
+        "stdio",
+        json.dumps(
+            {
+                "command": "python",
+                "args": ["-m", "supportagent.mcp_servers.time_mcp", "--transport", "stdio"],
+            }
+        ),
+        True,
+    ),
     (
         "weather_mcp",
         "Local Google Weather MCP server",
@@ -68,6 +86,7 @@ READ_ONLY_TOOL_NAMES = {
     "list_folder_files",
     "list_chats",
     "get_weather",
+    "get_current_time",
 }
 
 PERSONAL_ACCOUNT_DISABLED_TOOL_NAMES = {
@@ -77,6 +96,7 @@ PERSONAL_ACCOUNT_DISABLED_TOOL_NAMES = {
 }
 
 DEFAULT_TOOL_POLICIES = [
+    ("time_mcp", "get_current_time"),
     ("weather_mcp", "get_weather"),
     ("teams_mcp", "get_my_profile"),
     ("teams_mcp", "batch_get_user_info"),
@@ -163,6 +183,21 @@ def create_mcp_schema(conn: psycopg.Connection) -> None:
             result_preview TEXT,
             error TEXT,
             created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS mcp_idempotency_records (
+            user_id TEXT NOT NULL,
+            server_name TEXT NOT NULL,
+            tool_name TEXT NOT NULL,
+            idempotency_key TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ('in_progress', 'succeeded')),
+            result TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            PRIMARY KEY (user_id, server_name, tool_name, idempotency_key)
         )
         """
     )
@@ -319,6 +354,96 @@ def tool_manual_allowed(server_name: str, tool_name: str, confirmed: bool) -> tu
     if policy.requires_confirmation and not confirmed:
         return False, "Tool requires explicit confirmation."
     return True, None
+
+
+def claim_idempotency_key(
+    *,
+    user_id: str,
+    server_name: str,
+    tool_name: str,
+    idempotency_key: str,
+) -> MCPIdempotencyClaim:
+    """Atomically reserve a write action or replay its earlier successful result."""
+    ensure_mcp_schema()
+    conn = get_connection()
+    try:
+        inserted = conn.execute(
+            """
+            INSERT INTO mcp_idempotency_records
+                (user_id, server_name, tool_name, idempotency_key, status)
+            VALUES (%s, %s, %s, %s, 'in_progress')
+            ON CONFLICT DO NOTHING
+            RETURNING status
+            """,
+            (user_id, server_name, tool_name, idempotency_key),
+        ).fetchone()
+        if inserted:
+            conn.commit()
+            return MCPIdempotencyClaim(status="execute")
+
+        row = conn.execute(
+            """
+            SELECT status, result
+            FROM mcp_idempotency_records
+            WHERE user_id = %s AND server_name = %s AND tool_name = %s
+              AND idempotency_key = %s
+            """,
+            (user_id, server_name, tool_name, idempotency_key),
+        ).fetchone()
+        conn.commit()
+        if row and row[0] == "succeeded":
+            return MCPIdempotencyClaim(status="replay", result=row[1])
+        return MCPIdempotencyClaim(status="in_progress")
+    finally:
+        conn.close()
+
+
+def complete_idempotency_key(
+    *,
+    user_id: str,
+    server_name: str,
+    tool_name: str,
+    idempotency_key: str,
+    result: str,
+) -> None:
+    ensure_mcp_schema()
+    conn = get_connection()
+    try:
+        conn.execute(
+            """
+            UPDATE mcp_idempotency_records
+            SET status = 'succeeded', result = %s, updated_at = now()
+            WHERE user_id = %s AND server_name = %s AND tool_name = %s
+              AND idempotency_key = %s
+            """,
+            (result, user_id, server_name, tool_name, idempotency_key),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def abandon_idempotency_key(
+    *,
+    user_id: str,
+    server_name: str,
+    tool_name: str,
+    idempotency_key: str,
+) -> None:
+    ensure_mcp_schema()
+    conn = get_connection()
+    try:
+        conn.execute(
+            """
+            DELETE FROM mcp_idempotency_records
+            WHERE user_id = %s AND server_name = %s AND tool_name = %s
+              AND idempotency_key = %s AND status = 'in_progress'
+            """,
+            (user_id, server_name, tool_name, idempotency_key),
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def upsert_user_credentials(user_id: str, server_name: str, credentials: dict[str, Any]) -> None:

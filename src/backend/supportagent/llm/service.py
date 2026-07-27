@@ -1,4 +1,5 @@
 from functools import lru_cache
+from time import perf_counter
 from typing import Any
 
 from supportagent.llm.errors import LLMError, map_provider_error
@@ -6,6 +7,7 @@ from supportagent.llm.providers import AnthropicProvider, OpenAICompatibleProvid
 from supportagent.llm.providers.base import ChatProvider
 from supportagent.llm.registry import get_provider_settings, resolve_model
 from supportagent.llm.schemas import ChatCompletion, LLMTask, ProviderName
+from supportagent.llm.usage import LLMCallUsage, record_llm_usage
 
 
 @lru_cache(maxsize=4)
@@ -32,14 +34,25 @@ def complete_chat(
     tool_choice: str | None = None,
 ) -> ChatCompletion:
     profile = resolve_model(requested_model, task=task)
+    started = perf_counter()
     try:
-        return _provider(profile.provider).complete(
+        completion = _provider(profile.provider).complete(
             profile,
             messages,
             temperature=temperature,
             tools=tools,
             tool_choice=tool_choice,
         )
+        record_llm_usage(
+            LLMCallUsage(
+                provider=profile.provider,
+                model_id=profile.id,
+                provider_model=profile.provider_model,
+                latency_ms=(perf_counter() - started) * 1000,
+                usage=completion.usage,
+            )
+        )
+        return completion
     except LLMError:
         raise
     except Exception as error:

@@ -4,11 +4,13 @@ from typing import Any
 from pydantic.fields import FieldInfo
 
 from supportagent.mcp_servers.teams_mcp.tools import TEAMS_TOOLS
+from supportagent.mcp_servers.time_mcp.tools import TIME_TOOLS
 from supportagent.mcp_servers.weather_mcp.tools import WEATHER_TOOLS
 
 
 TOOL_REGISTRY = {
     "teams_mcp": {tool.__name__: tool for tool in TEAMS_TOOLS},
+    "time_mcp": {tool.__name__: tool for tool in TIME_TOOLS},
     "weather_mcp": {tool.__name__: tool for tool in WEATHER_TOOLS},
 }
 
@@ -31,6 +33,7 @@ EXAMPLE_ARGUMENTS: dict[tuple[str, str], dict[str, Any]] = {
         "content": "Notes from SupportAgent.",
     },
     ("teams_mcp", "create_message"): {"chat_id": "replace-with-chat-id", "content": "Hello from SupportAgent."},
+    ("time_mcp", "get_current_time"): {"timezone": "Europe/Zurich"},
     ("weather_mcp", "get_weather"): {"location": "Zurich", "days": 3},
 }
 

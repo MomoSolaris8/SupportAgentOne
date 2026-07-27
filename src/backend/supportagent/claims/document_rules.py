@@ -2,7 +2,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-from supportagent.claims.schemas import Claim, ClaimDocument, ProductLine
+from supportagent.claims.schemas import ActionType, Claim, ClaimDocument, ProductLine
 
 
 RequirementLevel = Literal["required", "optional", "conditional"]
@@ -168,3 +168,9 @@ def completed_document_types(documents: list[ClaimDocument]) -> list[str]:
 def missing_documents_for_claim(claim: Claim, documents: list[ClaimDocument]) -> list[str]:
     present = set(completed_document_types(documents))
     return sorted(set(required_documents_for_claim(claim)) - present)
+
+
+def follow_up_action_for_missing_documents(
+    missing_documents: list[str],
+) -> ActionType | None:
+    return "CREATE_JIRA_ISSUE" if missing_documents else None

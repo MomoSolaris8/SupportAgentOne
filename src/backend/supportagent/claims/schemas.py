@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 ClaimStatus = Literal[
@@ -9,6 +9,8 @@ ClaimStatus = Literal[
     "READY_FOR_REVIEW",
     "UNDER_REVIEW",
     "NEEDS_INFORMATION",
+    "READY_FOR_DECISION",
+    "EXPERT_REVIEW_REQUIRED",
     "APPROVED",
     "REJECTED",
     "CLOSED",
@@ -116,16 +118,6 @@ class ActionDecisionRequest(BaseModel):
     comment: str | None = Field(default=None, max_length=1000)
 
 
-class ClaimDetail(BaseModel):
-    claim: Claim
-    documents: list[ClaimDocument] = Field(default_factory=list)
-    proposed_actions: list[ProposedAction] = Field(default_factory=list)
-
-
-class ClaimsResponse(BaseModel):
-    claims: list[Claim] = Field(default_factory=list)
-
-
 class ClaimEvidence(BaseModel):
     source_id: str
     title: str
@@ -147,3 +139,62 @@ class ClaimReviewResponse(BaseModel):
     evidence: list[ClaimEvidence] = Field(default_factory=list)
     recommendation: str
     proposed_action: ProposedAction | None = None
+
+
+ReviewRunStatus = Literal["QUEUED", "RUNNING", "SUCCEEDED", "FAILED"]
+
+
+class ClaimReviewRun(BaseModel):
+    id: str
+    claim_id: str
+    status: ReviewRunStatus
+    current_step: str
+    result: ClaimReviewResponse | None = None
+    error: str | None = None
+    created_at: str
+    updated_at: str
+    completed_at: str | None = None
+
+
+class ClaimAuditEvent(BaseModel):
+    id: int
+    event_type: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+    actor_user_id: str
+    created_at: str
+
+
+class ClaimSubmissionResponse(BaseModel):
+    claim: Claim
+    present_documents: list[str] = Field(default_factory=list)
+    missing_documents: list[str] = Field(default_factory=list)
+
+
+class ClaimNextStepRequest(BaseModel):
+    next_step: Literal["REQUEST_INFORMATION", "ESCALATE_TO_EXPERT"]
+    comment: str | None = Field(default=None, max_length=1000)
+
+
+class ClaimDecisionRequest(BaseModel):
+    decision: Literal["APPROVE", "REJECT"]
+    reason: str | None = Field(default=None, max_length=2000)
+
+    @model_validator(mode="after")
+    def require_rejection_reason(self):
+        if self.decision == "REJECT" and not (self.reason or "").strip():
+            raise ValueError("A reason is required when rejecting a claim.")
+        if self.reason is not None:
+            self.reason = self.reason.strip() or None
+        return self
+
+
+class ClaimDetail(BaseModel):
+    claim: Claim
+    documents: list[ClaimDocument] = Field(default_factory=list)
+    proposed_actions: list[ProposedAction] = Field(default_factory=list)
+    latest_review_run: ClaimReviewRun | None = None
+    audit_events: list[ClaimAuditEvent] = Field(default_factory=list)
+
+
+class ClaimsResponse(BaseModel):
+    claims: list[Claim] = Field(default_factory=list)

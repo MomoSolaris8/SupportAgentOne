@@ -5,6 +5,7 @@ from supportagent.llm.schemas import (
     ChatCompletion,
     ModelProfile,
     ProviderSettings,
+    TokenUsage,
     ToolCall,
 )
 
@@ -145,6 +146,13 @@ class AnthropicProvider:
                 kwargs["tool_choice"] = {"type": "auto"}
 
         response = self.client.messages.create(**kwargs)
+        usage = getattr(response, "usage", None)
+        cached_input_tokens = int(
+            getattr(usage, "cache_read_input_tokens", 0) or 0
+        )
+        cache_creation_input_tokens = int(
+            getattr(usage, "cache_creation_input_tokens", 0) or 0
+        )
         text = []
         calls = []
         for block in response.content:
@@ -163,4 +171,14 @@ class AnthropicProvider:
             model_id=profile.id,
             provider=profile.provider,
             tool_calls=tuple(calls),
+            usage=TokenUsage(
+                input_tokens=(
+                    int(getattr(usage, "input_tokens", 0) or 0)
+                    + cached_input_tokens
+                    + cache_creation_input_tokens
+                ),
+                output_tokens=int(getattr(usage, "output_tokens", 0) or 0),
+                cached_input_tokens=cached_input_tokens,
+                cache_creation_input_tokens=cache_creation_input_tokens,
+            ),
         )

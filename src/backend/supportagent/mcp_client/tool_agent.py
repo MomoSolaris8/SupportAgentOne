@@ -3,6 +3,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
+from supportagent.core.language import response_language_name
 from supportagent.llm import complete_chat
 from supportagent.mcp_client.client import MultiServerMCPClient
 from supportagent.mcp_client.config import (
@@ -84,6 +85,7 @@ async def run_dynamic_mcp_agent(
     if not configs:
         return MCPAgentResult(answer=None)
 
+    response_language = response_language_name(question)
     client = MultiServerMCPClient(configs)
     try:
         tools_by_server = await client.list_tools()
@@ -108,7 +110,10 @@ async def run_dynamic_mcp_agent(
                 "You are a tool-routing sub-agent. Use the available MCP tools only when the "
                 "user's request clearly needs live external data or an action. If no tool is "
                 "needed, answer with the exact text: NO_TOOL_NEEDED. Do not call write/action "
-                "tools unless they are available in the tool list."
+                "tools unless they are available in the tool list. If you answer the user, "
+                f"respond in {response_language}, matching the user's request language. "
+                "Never infer a timezone from the request language. For a current-time request "
+                "without an explicit place or timezone, use Europe/Zurich."
             ),
         },
         {"role": "user", "content": question},
@@ -198,7 +203,10 @@ async def run_dynamic_mcp_agent(
         + [
             {
                 "role": "user",
-                "content": "Use the MCP tool results above to answer the original request concisely.",
+                "content": (
+                    "Use the MCP tool results above to answer the original request concisely. "
+                    f"Answer in {response_language}."
+                ),
             }
         ],
         requested_model=model,

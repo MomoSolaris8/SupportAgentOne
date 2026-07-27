@@ -159,6 +159,10 @@ def create_calendar_event(
     body: str | None = Field(default=None, description="HTML event body."),
     location: str | None = Field(default=None, description="Location display name."),
     attendees: list[str] | None = Field(default=None, description="Attendee email addresses."),
+    transaction_id: str | None = Field(
+        default=None,
+        description="Stable idempotency id for safe retries.",
+    ),
     access_token: str | None = Field(default=None, description="Microsoft Graph access token."),
 ) -> Any:
     """Create a calendar event."""
@@ -166,6 +170,7 @@ def create_calendar_event(
     body = _value(body)
     location = _value(location)
     attendees = _value(attendees)
+    transaction_id = _value(transaction_id)
     payload: dict[str, Any] = {
         "subject": subject,
         "start": {"dateTime": start_time, "timeZone": timezone},
@@ -177,6 +182,8 @@ def create_calendar_event(
         payload["location"] = {"displayName": location}
     if attendees:
         payload["attendees"] = [_attendee(email) for email in attendees]
+    if transaction_id:
+        payload["transactionId"] = transaction_id
     return request_json(
         "POST",
         f"{_user_base(user_id)}/calendars/{quote(calendar_id, safe='')}/events",
@@ -192,12 +199,19 @@ def create_default_calendar_event(
     timezone: str = Field(default="W. Europe Standard Time", description="Windows timezone id."),
     body: str | None = Field(default=None, description="HTML event body."),
     location: str | None = Field(default=None, description="Location display name."),
+    attendees: list[str] | None = Field(default=None, description="Attendee email addresses."),
+    transaction_id: str | None = Field(
+        default=None,
+        description="Stable idempotency id for safe retries.",
+    ),
     access_token: str | None = Field(default=None, description="Microsoft Graph access token."),
 ) -> Any:
     """Create an event in the signed-in user's default calendar."""
     timezone = _value(timezone) or "W. Europe Standard Time"
     body = _value(body)
     location = _value(location)
+    attendees = _value(attendees)
+    transaction_id = _value(transaction_id)
     payload: dict[str, Any] = {
         "subject": subject,
         "start": {"dateTime": start_time, "timeZone": timezone},
@@ -207,6 +221,10 @@ def create_default_calendar_event(
         payload["body"] = {"contentType": "HTML", "content": body}
     if location:
         payload["location"] = {"displayName": location}
+    if attendees:
+        payload["attendees"] = [_attendee(email) for email in attendees]
+    if transaction_id:
+        payload["transactionId"] = transaction_id
     return request_json(
         "POST",
         f"{GRAPH_BASE_URL}/me/events",

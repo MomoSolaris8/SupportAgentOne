@@ -59,6 +59,98 @@ def test_openai_compatible_provider_normalizes_tool_calls():
     assert result.tool_calls[0].arguments == {"location": "Bern"}
 
 
+def test_openai_compatible_provider_normalizes_token_usage():
+    class Completions:
+        def create(self, **kwargs):
+            message = type("Message", (), {"content": "ok", "tool_calls": []})()
+            choice = type("Choice", (), {"message": message})()
+            prompt_details = type("PromptDetails", (), {"cached_tokens": 40})()
+            completion_details = type(
+                "CompletionDetails",
+                (),
+                {"reasoning_tokens": 12},
+            )()
+            usage = type(
+                "Usage",
+                (),
+                {
+                    "prompt_tokens": 100,
+                    "completion_tokens": 25,
+                    "prompt_tokens_details": prompt_details,
+                    "completion_tokens_details": completion_details,
+                },
+            )()
+            return type("Response", (), {"choices": [choice], "usage": usage})()
+
+    provider = OpenAICompatibleProvider.__new__(OpenAICompatibleProvider)
+    provider.client = type(
+        "Client",
+        (),
+        {"chat": type("Chat", (), {"completions": Completions()})()},
+    )()
+
+    result = provider.complete(
+        profile(),
+        [{"role": "user", "content": "Hello"}],
+    )
+
+    assert result.usage.input_tokens == 100
+    assert result.usage.output_tokens == 25
+    assert result.usage.cached_input_tokens == 40
+    assert result.usage.reasoning_tokens == 12
+
+
+def test_openai_compatible_provider_serializes_follow_up_tool_calls():
+    captured = {}
+
+    class Completions:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            message = type("Message", (), {"content": "It is 14:30.", "tool_calls": []})()
+            choice = type("Choice", (), {"message": message})()
+            return type("Response", (), {"choices": [choice]})()
+
+    provider = OpenAICompatibleProvider.__new__(OpenAICompatibleProvider)
+    provider.client = type(
+        "Client",
+        (),
+        {"chat": type("Chat", (), {"completions": Completions()})()},
+    )()
+
+    provider.complete(
+        profile(),
+        [
+            {"role": "user", "content": "What time is it?"},
+            {
+                "role": "assistant",
+                "content": "",
+                "tool_calls": [
+                    {
+                        "id": "call-1",
+                        "name": "time_mcp__get_current_time",
+                        "arguments": {"timezone": "Europe/Zurich"},
+                    }
+                ],
+            },
+            {
+                "role": "tool",
+                "tool_call_id": "call-1",
+                "content": '{"time":"14:30:00"}',
+            },
+        ],
+    )
+
+    serialized_call = captured["messages"][1]["tool_calls"][0]
+    assert serialized_call == {
+        "id": "call-1",
+        "type": "function",
+        "function": {
+            "name": "time_mcp__get_current_time",
+            "arguments": '{"timezone": "Europe/Zurich"}',
+        },
+    }
+
+
 def test_kimi_provider_omits_fixed_sampling_parameters():
     captured = {}
 
@@ -161,3 +253,33 @@ def test_anthropic_provider_converts_openai_tool_schema():
             },
         }
     ]
+
+
+def test_anthropic_provider_normalizes_token_usage():
+    class Messages:
+        def create(self, **kwargs):
+            block = type("Block", (), {"type": "text", "text": "ok"})()
+            usage = type(
+                "Usage",
+                (),
+                {
+                    "input_tokens": 70,
+                    "output_tokens": 20,
+                    "cache_read_input_tokens": 25,
+                    "cache_creation_input_tokens": 5,
+                },
+            )()
+            return type("Response", (), {"content": [block], "usage": usage})()
+
+    provider = AnthropicProvider.__new__(AnthropicProvider)
+    provider.client = type("Client", (), {"messages": Messages()})()
+
+    result = provider.complete(
+        profile("anthropic"),
+        [{"role": "user", "content": "Hello"}],
+    )
+
+    assert result.usage.input_tokens == 100
+    assert result.usage.output_tokens == 20
+    assert result.usage.cached_input_tokens == 25
+    assert result.usage.cache_creation_input_tokens == 5

@@ -3,6 +3,9 @@ from fastapi import FastAPI
 from supportagent.api.ask import ask
 from supportagent.api.claims import (
     approve_action_route,
+    claim_next_step_route,
+    claim_decision_route,
+    claim_review_run_route,
     create_claim_document_route,
     create_claim_route,
     create_proposed_action_route,
@@ -10,6 +13,7 @@ from supportagent.api.claims import (
     list_claims_route,
     reject_action_route,
     review_claim_route,
+    submit_claim_route,
 )
 from supportagent.api.health import health, readiness
 from supportagent.api.mcp import (
@@ -36,7 +40,8 @@ from supportagent.claims.schemas import (
     Claim,
     ClaimDetail,
     ClaimDocument,
-    ClaimReviewResponse,
+    ClaimReviewRun,
+    ClaimSubmissionResponse,
     ClaimsResponse,
     ProposedAction,
 )
@@ -66,8 +71,24 @@ def register_routes(app: FastAPI) -> None:
         methods=["POST"], response_model=ProposedAction, tags=["Claims"],
     )
     app.add_api_route(
+        "/claims/{claim_id}/submit", submit_claim_route,
+        methods=["POST"], response_model=ClaimSubmissionResponse, tags=["Claims"],
+    )
+    app.add_api_route(
         "/claims/{claim_id}/review", review_claim_route,
-        methods=["POST"], response_model=ClaimReviewResponse, tags=["Claims"],
+        methods=["POST"], response_model=ClaimReviewRun, status_code=202, tags=["Claims"],
+    )
+    app.add_api_route(
+        "/claims/{claim_id}/review-runs/{run_id}", claim_review_run_route,
+        methods=["GET"], response_model=ClaimReviewRun, tags=["Claims"],
+    )
+    app.add_api_route(
+        "/claims/{claim_id}/next-step", claim_next_step_route,
+        methods=["POST"], response_model=Claim, tags=["Claims"],
+    )
+    app.add_api_route(
+        "/claims/{claim_id}/decision", claim_decision_route,
+        methods=["POST"], response_model=Claim, tags=["Claims"],
     )
     app.add_api_route(
         "/claims/{claim_id}/actions/{action_id}/approve", approve_action_route,

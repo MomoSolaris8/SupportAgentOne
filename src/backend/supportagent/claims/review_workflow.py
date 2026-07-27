@@ -6,6 +6,7 @@ from langgraph.graph import END, START, StateGraph
 from supportagent.claims.document_rules import (
     completed_document_types,
     conditional_documents_for_claim,
+    follow_up_action_for_missing_documents,
     missing_documents_for_claim,
     optional_documents_for_claim,
     required_documents_for_claim,
@@ -20,7 +21,13 @@ from supportagent.claims.schemas import (
     CreateProposedActionRequest,
     ProposedAction,
 )
-from supportagent.claims.service import create_proposed_action, get_claim
+from supportagent.claims.service import (
+    complete_claim_review_run,
+    create_proposed_action,
+    fail_claim_review_run,
+    get_claim,
+    record_claim_review_progress,
+)
 from supportagent.core.answer import REFUSAL_TEXT, generate_answer
 from supportagent.rag.retrieval import retrieve
 
@@ -43,6 +50,18 @@ class ClaimReviewState(TypedDict, total=False):
     evidence_reason: str
     recommendation: str
     proposed_action: ProposedAction | None
+    persist_progress: bool
+
+
+def _progress(state: ClaimReviewState, step: str) -> None:
+    if not state.get("persist_progress"):
+        return
+    record_claim_review_progress(
+        state["claim_id"],
+        state["run_id"],
+        state["owner_user_id"],
+        step,
+    )
 
 
 def verify_claim_evidence(chunks: list[dict]) -> tuple[Literal["sufficient", "insufficient"], str]:
@@ -55,11 +74,13 @@ def verify_claim_evidence(chunks: list[dict]) -> tuple[Literal["sufficient", "in
 
 
 def load_claim_node(state: ClaimReviewState) -> ClaimReviewState:
+    _progress(state, "LOAD_CLAIM")
     detail = get_claim(state["claim_id"], state["owner_user_id"])
     return {"claim": detail.claim, "documents": detail.documents}
 
 
 def check_documents_node(state: ClaimReviewState) -> ClaimReviewState:
+    _progress(state, "CHECK_DOCUMENTS")
     claim = state["claim"]
     documents = state["documents"]
     return {
@@ -75,6 +96,7 @@ def check_documents_node(state: ClaimReviewState) -> ClaimReviewState:
 
 
 def retrieve_policy_node(state: ClaimReviewState) -> ClaimReviewState:
+    _progress(state, "RETRIEVE_POLICY_EVIDENCE")
     claim = state["claim"]
     query = (
         f"Versicherungspolice {claim.policy_id}, Produkt {claim.product_line}, "
@@ -90,6 +112,7 @@ def retrieve_policy_node(state: ClaimReviewState) -> ClaimReviewState:
 
 
 def verify_evidence_node(state: ClaimReviewState) -> ClaimReviewState:
+    _progress(state, "VERIFY_EVIDENCE")
     if state["claim"].product_line == "unknown":
         return {
             "evidence_status": "insufficient",
@@ -104,10 +127,12 @@ def route_after_evidence(state: ClaimReviewState) -> Literal["generate_recommend
 
 
 def refuse_recommendation_node(state: ClaimReviewState) -> ClaimReviewState:
+    _progress(state, "GENERATE_RECOMMENDATION")
     return {"recommendation": REFUSAL_TEXT}
 
 
 def generate_recommendation_node(state: ClaimReviewState) -> ClaimReviewState:
+    _progress(state, "GENERATE_RECOMMENDATION")
     claim = state["claim"]
     missing = state["missing_documents"]
     question = (
@@ -128,8 +153,10 @@ def generate_recommendation_node(state: ClaimReviewState) -> ClaimReviewState:
 
 
 def propose_jira_node(state: ClaimReviewState) -> ClaimReviewState:
+    _progress(state, "PREPARE_NEXT_ACTION")
     missing = state["missing_documents"]
-    if not missing:
+    action_type = follow_up_action_for_missing_documents(missing)
+    if action_type is None:
         return {"proposed_action": None}
     claim = state["claim"]
     action = create_proposed_action(
@@ -137,7 +164,7 @@ def propose_jira_node(state: ClaimReviewState) -> ClaimReviewState:
         state["owner_user_id"],
         CreateProposedActionRequest(
             run_id=state["run_id"],
-            action_type="CREATE_JIRA_ISSUE",
+            action_type=action_type,
             tool_server="jira_mcp",
             tool_name="create_issue",
             arguments={
@@ -200,9 +227,20 @@ def _evidence_from_chunks(chunks: list[dict]) -> list[ClaimEvidence]:
     return evidence
 
 
-def review_claim(claim_id: str, owner_user_id: str) -> ClaimReviewResponse:
+def review_claim(
+    claim_id: str,
+    owner_user_id: str,
+    *,
+    run_id: str | None = None,
+    persist_progress: bool = False,
+) -> ClaimReviewResponse:
     state = CLAIM_REVIEW_GRAPH.invoke(
-        {"run_id": str(uuid4()), "claim_id": claim_id, "owner_user_id": owner_user_id}
+        {
+            "run_id": run_id or str(uuid4()),
+            "claim_id": claim_id,
+            "owner_user_id": owner_user_id,
+            "persist_progress": persist_progress,
+        }
     )
     return ClaimReviewResponse(
         run_id=state["run_id"],
@@ -219,3 +257,16 @@ def review_claim(claim_id: str, owner_user_id: str) -> ClaimReviewResponse:
         recommendation=state["recommendation"],
         proposed_action=state.get("proposed_action"),
     )
+
+
+def execute_claim_review_run(claim_id: str, run_id: str, owner_user_id: str) -> None:
+    try:
+        result = review_claim(
+            claim_id,
+            owner_user_id,
+            run_id=run_id,
+            persist_progress=True,
+        )
+        complete_claim_review_run(result, owner_user_id)
+    except Exception as error:
+        fail_claim_review_run(claim_id, run_id, owner_user_id, str(error))
