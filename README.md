@@ -1,89 +1,82 @@
 # SupportAgent
 
-RAG pipeline over a real Confluence space + Jira project, for the
-"Insurance Knowledge Search Dashboard" portfolio project. See
-`architecture-proposal-v0.1.de.md` for the full design.
+An evidence-bound insurance operations agent for claim review, RAG-assisted
+answers, controlled MCP actions, and human approval. It is built as a
+production-style portfolio project: you build it, run it, observe it, and
+evaluate it.
 
-## Architecture (Prototype / MVP Deployment)
+## Architecture
 
 ```mermaid
-graph TD
-    User[👤 Browser]
+flowchart LR
+    user[User]
 
-subgraph SC["🌐 Frontend"]
-Dashboard[frontend<br/>Next.js]
-end
+    subgraph frontend[Frontend]
+        ui[Next.js operations workspace]
+    end
 
-subgraph VC["⚡ Backend API"]
-API[api.py<br/>POST /ask]
-Retrieval[retrieval.py<br/>retrieve]
-Answer[answer.py<br/>generate_answer]
-end
+    subgraph backend[FastAPI backend]
+        api[Authenticated API routes]
+        agent[LangGraph agent workflow]
+        review[Claim review workflow]
+        mcp_agent[Dynamic MCP tool agent]
+    end
 
-subgraph SB["🗄️ Database"]
-PG[(Postgres + pgvector)]
-end
+    subgraph data[State and evidence]
+        postgres[(PostgreSQL and pgvector)]
+        memory[Conversation memory]
+        audit[Claim and MCP audit trail]
+    end
 
-subgraph DS["🤖 AI Services"]
-Embed[text-embedding-v3]
-Chat[qwen3-max]
-end
+    subgraph ai[AI services]
+        embeddings[Embedding model]
+        registry[LLM provider registry]
+        models[Qwen Kimi Claude]
+    end
 
-User -->|ask question|Dashboard
-Dashboard -->|POST /ask|API
+    subgraph tools[Controlled integrations]
+        policy[MCP policy gateway]
+        services[Time Weather Microsoft Graph]
+    end
 
-API --> Retrieval
-Retrieval --> Embed
-Embed --> Retrieval
+    subgraph quality[Operations]
+        logs[Request logs and trace IDs]
+        evaluation[Offline eval and online benchmark]
+        langfuse[Optional Langfuse trace]
+    end
 
-Retrieval --> PG
-PG --> Retrieval
-
-Retrieval --> API
-
-API --> Answer
-Answer --> Chat
-Chat --> Answer
-
-Answer --> API
-API --> Dashboard
-Dashboard --> User
-
-%% Colors
-classDef frontend fill: #4f46e5, color: #fff
-classDef backend fill: #059669, color: #fff
-classDef database fill: #dc2626, color: #fff
-classDef ai fill: #ea580c, color: #fff
-classDef user fill: #6b7280, color: #fff
-
-class Dashboard frontend
-class API,Retrieval, Answer backend
-class PG database
-class Embed,Chat ai
-class User user
+    user --> ui
+    ui --> api
+    api --> agent
+    api --> review
+    agent --> memory
+    agent --> embeddings
+    embeddings --> postgres
+    agent --> registry
+    registry --> models
+    agent --> mcp_agent
+    mcp_agent --> policy
+    policy --> services
+    review --> postgres
+    review --> audit
+    agent --> audit
+    api --> logs
+    agent --> langfuse
+    evaluation --> agent
 ```
 
-- `api.py` is a thin controller: it just calls `retrieve()` then `generate_answer()`.
-- Two external calls go to DashScope: one to embed the question, one to generate
-  the final answer from the retrieved chunks.
-- The Next.js frontend proxies browser requests through `/api/ask` to the FastAPI
-  backend, so no JWT or browser-side CORS setup is required for local development.
-
-## Screenshots
-
-Dashboard: ask a German question and get an answer with cited, expandable sources.
-
-![Dashboard with cited sources](screenshots/Dashboard1.png)
-
-![Dashboard answering a general "versicherung" query](screenshots/confluence_dashboard.png)
-
-`/ask` API schema (FastAPI Swagger UI):
-
-![FastAPI /ask schema](screenshots/fastapi_doc1.png)
-
-The real Jira project (KAN) backing the "documentation gap" tickets used as sources:
-
-![Jira board](screenshots/Jira_dashboard1.png)
+- The Operations UI supports German and English, persisted conversation threads,
+  model selection, claim review, audit history, and controlled Calendar actions.
+- FastAPI keeps HTTP, authentication, and policy boundaries separate from the
+  LangGraph agent and claim-review workflows.
+- The agent graph loads memory, optionally calls safe MCP tools, routes and
+  rewrites the question, retrieves evidence from pgvector, then answers or
+  returns a controlled refusal.
+- Qwen, Kimi, and Claude are selected through a provider registry. Provider
+  adapters normalize tool calls and token usage for observability and benchmark
+  reporting.
+- Write actions such as Microsoft Calendar creation require explicit confirmation,
+  are audited, and use server-side idempotency to prevent duplicate events.
 
 ## Setup
 
