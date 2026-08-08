@@ -1,82 +1,157 @@
 # SupportAgent
 
-An evidence-bound insurance operations agent for claim review, RAG-assisted
-answers, controlled MCP actions, and human approval. It is built as a
-production-style portfolio project: you build it, run it, observe it, and
-evaluate it.
+**An evidence-bound insurance support agent that refuses to answer when the
+retrieved sources do not support the claim — and proves it with a deterministic
+evaluation gate in CI.**
+
+![Python](https://img.shields.io/badge/python-3.12-blue)
+![LangGraph](https://img.shields.io/badge/orchestration-LangGraph-green)
+![Eval](https://img.shields.io/badge/eval%20gate-12%2F12%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-121-brightgreen)
+
+German-language claim review, RAG answers over Confluence and Jira, controlled
+MCP tool actions with human approval, and multi-provider LLM routing. Built as a
+production-style system: it runs, it is observable, and every behavioural rule
+is covered by an executable test.
+
+---
+
+## Why this project is different
+
+Most RAG demos answer every question. This one is designed around the opposite
+constraint: **in insurance, a confident wrong answer is worse than no answer.**
+
+| Design decision | Where it lives | Why |
+| --- | --- | --- |
+| Explicit trust boundary in the prompt — retrieved chunks are *candidates*, not evidence | `prompts/insurance_knowledge/system.py` | Defends against indirect prompt injection through Confluence content |
+| Fixed refusal contract instead of a hedged answer | `core/answer.py:enforce_answer_contract()` | A partial answer mixed with a disclaimer is unauditable |
+| Credentials stripped from every model-visible tool schema | `mcp_client/tool_agent.py:_tool_schema()` | A fully hijacked model still cannot reach a token |
+| Write actions require explicit approval + idempotency keys | `claims/state_machine.py`, `api/mcp.py` | The agent proposes; a human commits |
+| Provider-agnostic model routing by capability, not by name | `llm/registry.py:resolve_model()` | Swapping providers must not touch application logic |
+
+## Verified results
+
+Every number below is produced by a command in this repository, not by hand.
+
+### Deterministic evaluation gate — runs in CI, needs no API keys
+
+```bash
+python -m supportagent.evaluation --suite claim-review
+```
+
+```
+[PASS] claim-review offline evaluation
+Cases: 12/12 passed (100.0%)
+- case_pass_rate:                      1.000  (required >= 1.000)
+- missing_documents_exact_match_rate:  1.000  (required >= 1.000)
+- proposed_action_exact_match_rate:    1.000  (required >= 1.000)
+- forbidden_action_execution_rate:     0.000  (required <= 0.000)
+```
+
+| Property | Value |
+| --- | --- |
+| Cases / gated metrics | 12 cases, 4 threshold-gated metrics, 4 checks per case |
+| Determinism | No LLM call, no network, no API key — pure rule execution |
+| Dataset versioning | `sha256:2117bbe2…` fingerprint recorded in every report |
+| Runtime | ~0.2 ms total — cheap enough to gate every pull request |
+| Failure mode | Non-zero exit code; GitHub Actions uploads the JSON report as an artifact |
+
+The metric that matters most is `forbidden_action_execution_rate`. It asserts
+that the agent **never** auto-executes an approval-gated write action. The
+threshold is `0.000`, so a single regression fails the build.
+
+### Scale and coverage
+
+| | |
+| --- | --- |
+| Backend | ~10,900 lines of Python across 17 modules |
+| Frontend | ~3,600 lines of TypeScript (Next.js operations workspace) |
+| Tests | **121 tests** across 30 files, incl. API-contract and state-machine tests |
+| CI | 3 jobs — backend tests + eval gate, frontend typecheck + build, Docker image builds |
+| LLM providers | 8 model profiles across Qwen, OpenAI, Anthropic, Kimi |
+| MCP servers | 3 local servers (time, weather, Microsoft Graph) |
+
+### Online benchmark — requires credentials, not a CI gate
+
+A second suite runs the **real** `answer_with_agent()` pipeline across the
+allowlisted models and reports citation validity, refusal correctness, response
+language, p95 latency and cost per request from live token usage:
+
+```bash
+python -m supportagent.evaluation.online_runner \
+  --models qwen3-max,kimi-k2.6,claude-sonnet-4 \
+  --trials 3 --min-pass-rate 0.75 --confirm-live
+```
+
+This executes 72 live requests (8 cases × 3 models × 3 trials) through the same
+`answer_with_agent()` entry point the API uses, with MCP tools and skills
+disabled so that model choice is the only variable. It is deliberately **not** a
+merge gate: it is non-deterministic and costs real money. The `--confirm-live`
+flag exists so nobody triggers it by accident.
+
+---
 
 ## Architecture
 
-```mermaid
-flowchart LR
-    user[User]
+One question, end to end. Every box below is a real file.
 
-    subgraph frontend[Frontend]
-        ui[Next.js operations workspace]
-    end
-
-    subgraph backend[FastAPI backend]
-        api[Authenticated API routes]
-        agent[LangGraph agent workflow]
-        review[Claim review workflow]
-        mcp_agent[Dynamic MCP tool agent]
-    end
-
-    subgraph data[State and evidence]
-        postgres[(PostgreSQL and pgvector)]
-        memory[Conversation memory]
-        audit[Claim and MCP audit trail]
-    end
-
-    subgraph ai[AI services]
-        embeddings[Embedding model]
-        registry[LLM provider registry]
-        models[Qwen Kimi Claude]
-    end
-
-    subgraph tools[Controlled integrations]
-        policy[MCP policy gateway]
-        services[Time Weather Microsoft Graph]
-    end
-
-    subgraph quality[Operations]
-        logs[Request logs and trace IDs]
-        evaluation[Offline eval and online benchmark]
-        langfuse[Optional Langfuse trace]
-    end
-
-    user --> ui
-    ui --> api
-    api --> agent
-    api --> review
-    agent --> memory
-    agent --> embeddings
-    embeddings --> postgres
-    agent --> registry
-    registry --> models
-    agent --> mcp_agent
-    mcp_agent --> policy
-    policy --> services
-    review --> postgres
-    review --> audit
-    agent --> audit
-    api --> logs
-    agent --> langfuse
-    evaluation --> agent
+```
+  Next.js UI  ──POST /ask──►  api/ask.py
+                                  │
+                                  ▼
+                       agent/workflow.py   (LangGraph StateGraph)
+                                  │
+     ┌────────────────────────────┼────────────────────────────┐
+     ▼                            ▼                            ▼
+ load_memory              mcp_tools ──┐                     route
+ memory/service.py     tool_agent.py  │            agent/router.py
+ short + long term      MCP + function│            confluence / jira
+                        calling       │                       │
+                                      │                       ▼
+                        answered by a │                    rewrite
+                        tool? ────────┘                agent/query_rewrite.py
+                             │ yes → END                      │
+                             │ no                             ▼
+                             └──────────────────────────►  retrieve
+                                                        rag/retrieval.py
+                                                          (pgvector)
+                                                              │
+                                                              ▼
+                                                       check_evidence
+                                                      agent/evidence.py
+                                                              │
+                                            ┌─────────────────┴──────────────┐
+                                            ▼                                ▼
+                                     refuse_answer                   generate_answer
+                                   fixed refusal text                 core/answer.py
+                                            └─────────────┬──────────────────┘
+                                                          ▼
+                                                    AskResponse
+                                              answer + sources + trace
 ```
 
-- The Operations UI supports German and English, persisted conversation threads,
-  model selection, claim review, audit history, and controlled Calendar actions.
-- FastAPI keeps HTTP, authentication, and policy boundaries separate from the
-  LangGraph agent and claim-review workflows.
-- The agent graph loads memory, optionally calls safe MCP tools, routes and
-  rewrites the question, retrieves evidence from pgvector, then answers or
-  returns a controlled refusal.
-- Qwen, Kimi, and Claude are selected through a provider registry. Provider
-  adapters normalize tool calls and token usage for observability and benchmark
-  reporting.
-- Write actions such as Microsoft Calendar creation require explicit confirmation,
-  are audited, and use server-side idempotency to prevent duplicate events.
+Everything the agent needs from outside goes through one of three gateways:
+
+```
+  LLM       llm/registry.py  →  llm/service.py  →  providers/{anthropic,openai_compatible}.py
+            8 model profiles, routed by capability (text / tools / vision), not by name
+
+  Tools     mcp_client/tool_agent.py  →  MCP servers (time, weather, Microsoft Graph)
+            whitelist + credential injection + audit log, credentials never in model context
+
+  State     PostgreSQL + pgvector — chunks, conversation memory, claims, MCP audit trail
+```
+
+- **The graph is deliberately static.** Edges are fixed at build time in
+  `build_agent_graph()`. Insurance answers must be reproducible and auditable, so
+  the model chooses *tools and wording*, never the control flow.
+- **`/ask` is the only agent entry point.** The API layer holds auth and HTTP
+  concerns; it calls `answer_with_agent()` and does no orchestration itself.
+- **Write actions are proposals, not executions.** Calendar creation and claim
+  actions require explicit confirmation, carry server-side idempotency keys, and
+  land in an audit table.
+- **Observability is on the path, not bolted on**: request IDs via middleware,
+  per-call token and latency capture in `llm/usage.py`, optional Langfuse trace.
 
 ## Setup
 
@@ -484,19 +559,19 @@ module docstring for the dry-run / save workflow.
 
 ## Tests
 
-# End-to-end tests
-
-测试完整链路：
-
-1. 启动 Postgres
-2. 启动 FastAPI
-3. 启动前端
-4. 用户访问 Assistant 页面
-5. 发送问题
-6. 前端调用 `/ask`
-7. 后端返回 answer、sources 和 trace
-8. 前端显示结果或错误信息
-
 ```bash
 python -m pytest
 ```
+
+### End-to-end flow under test
+
+The e2e suite exercises the full chain rather than a mocked slice:
+
+1. Start PostgreSQL (pgvector)
+2. Start the FastAPI backend
+3. Start the Next.js frontend
+4. Open the Assistant page
+5. Submit a question
+6. Frontend calls `/ask`
+7. Backend returns `answer`, `sources`, and `trace`
+8. Frontend renders the result — or the error state
