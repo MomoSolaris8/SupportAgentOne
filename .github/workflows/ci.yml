@@ -81,7 +81,8 @@ jobs:
         run: npm run build
 
   docker:
-    name: Docker image builds
+    name: Docker image build check
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     needs: [backend, frontend]
 
@@ -94,3 +95,57 @@ jobs:
 
       - name: Build frontend image
         run: docker build -f src/frontend/Dockerfile -t supportagent-frontend:ci src/frontend
+
+  publish-backend-image:
+    name: Publish backend image
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    environment: azure-dev
+
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      AZURE_CONTAINER_REGISTRY: acrsupportagentdev
+      IMAGE_REPOSITORY: supportagent-api
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to Azure with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Define immutable image URI
+        id: image
+        shell: bash
+        run: |
+          ACR_LOGIN_SERVER="$(az acr show \
+            --name "$AZURE_CONTAINER_REGISTRY" \
+            --query loginServer \
+            --output tsv)"
+
+          IMAGE_URI="${ACR_LOGIN_SERVER}/${IMAGE_REPOSITORY}:${GITHUB_SHA}"
+          echo "image_uri=${IMAGE_URI}" >> "$GITHUB_OUTPUT"
+          echo "Publishing ${IMAGE_URI}"
+
+      - name: Log Docker in to ACR
+        run: az acr login --name "$AZURE_CONTAINER_REGISTRY"
+
+      - name: Build and push backend image
+        run: |
+          docker buildx build \
+            --platform linux/amd64 \
+            --file Dockerfile.backend \
+            --tag "${{ steps.image.outputs.image_uri }}" \
+            --push \
+            .
