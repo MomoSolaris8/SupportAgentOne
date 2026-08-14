@@ -7,7 +7,7 @@ from langchain_core.tools import StructuredTool
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.sse import sse_client
 from mcp.client.stdio import stdio_client
-from mcp.client.streamable_http import streamablehttp_client
+from mcp.client.streamable_http import streamable_http_client
 from mcp.types import CallToolResult, TextContent, Tool
 
 from supportagent.mcp_client.config import MCPServerConfig
@@ -38,7 +38,7 @@ async def create_mcp_session(config: MCPServerConfig) -> AsyncIterator[ClientSes
                 yield session
         return
 
-    async with streamablehttp_client(
+    async with streamable_http_client(
         config.url,
         timeout=timedelta(seconds=30),
         sse_read_timeout=timedelta(minutes=5),
