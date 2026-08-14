@@ -2,6 +2,10 @@ name: Deploy Backend to Azure Dev
 
 on:
   workflow_dispatch:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
 
 permissions:
   contents: read
@@ -20,12 +24,18 @@ env:
 jobs:
   deploy:
     name: Build and deploy backend
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+
     runs-on: ubuntu-latest
     environment: azure-dev
 
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       - name: Log in to Azure with OIDC
         uses: azure/login@v2
@@ -46,7 +56,8 @@ jobs:
             --query loginServer \
             --output tsv)"
 
-          IMAGE_URI="${ACR_LOGIN_SERVER}/${IMAGE_REPOSITORY}:${GITHUB_SHA}"
+          DEPLOY_SHA="${{ github.event.workflow_run.head_sha || github.sha }}"
+          IMAGE_URI="${ACR_LOGIN_SERVER}/${IMAGE_REPOSITORY}:${DEPLOY_SHA}"
           echo "image_uri=${IMAGE_URI}" >> "$GITHUB_OUTPUT"
           echo "Building ${IMAGE_URI}"
 
