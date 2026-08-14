@@ -1,0 +1,119 @@
+name: Deploy Backend to Azure Dev
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: supportagent-azure-dev
+  cancel-in-progress: false
+
+env:
+  AZURE_RESOURCE_GROUP: rg-supportagent-dev
+  AZURE_CONTAINER_APP: ca-supportagent-api-dev
+  AZURE_CONTAINER_REGISTRY: acrsupportagentdev
+  IMAGE_REPOSITORY: supportagent-api
+
+jobs:
+  deploy:
+    name: Build and deploy backend
+    runs-on: ubuntu-latest
+    environment: azure-dev
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Log in to Azure with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Define immutable image URI
+        id: image
+        shell: bash
+        run: |
+          ACR_LOGIN_SERVER="$(az acr show \
+            --name "$AZURE_CONTAINER_REGISTRY" \
+            --query loginServer \
+            --output tsv)"
+
+          IMAGE_URI="${ACR_LOGIN_SERVER}/${IMAGE_REPOSITORY}:${GITHUB_SHA}"
+          echo "image_uri=${IMAGE_URI}" >> "$GITHUB_OUTPUT"
+          echo "Building ${IMAGE_URI}"
+
+      - name: Log Docker in to ACR
+        run: az acr login --name "$AZURE_CONTAINER_REGISTRY"
+
+      - name: Build and push backend image
+        run: |
+          docker buildx build \
+            --platform linux/amd64 \
+            --file Dockerfile.backend \
+            --tag "${{ steps.image.outputs.image_uri }}" \
+            --push \
+            .
+
+      - name: Update Azure Container App
+        run: |
+          az containerapp update \
+            --name "$AZURE_CONTAINER_APP" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --image "${{ steps.image.outputs.image_uri }}" \
+            --output none
+
+      - name: Verify deployed image
+        shell: bash
+        run: |
+          CURRENT_IMAGE="$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query 'properties.template.containers[0].image' \
+            --output tsv)"
+
+          EXPECTED_IMAGE="${{ steps.image.outputs.image_uri }}"
+
+          echo "Expected: ${EXPECTED_IMAGE}"
+          echo "Current:  ${CURRENT_IMAGE}"
+
+          test "$CURRENT_IMAGE" = "$EXPECTED_IMAGE"
+
+      - name: Check application readiness
+        shell: bash
+        run: |
+          FQDN="$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query 'properties.configuration.ingress.fqdn' \
+            --output tsv)"
+
+          for attempt in {1..12}; do
+            echo "Readiness attempt ${attempt}/12"
+
+            STATUS="$(curl \
+              --silent \
+              --show-error \
+              --output /tmp/ready.json \
+              --write-out '%{http_code}' \
+              --max-time 20 \
+              "https://${FQDN}/ready" || true)"
+
+            if [ "$STATUS" = "200" ]; then
+              cat /tmp/ready.json
+              exit 0
+            fi
+
+            sleep 10
+          done
+
+          echo "Container App did not become ready"
+          cat /tmp/ready.json 2>/dev/null || true
+          exit 1
