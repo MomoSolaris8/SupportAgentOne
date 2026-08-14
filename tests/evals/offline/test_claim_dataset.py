@@ -7,15 +7,15 @@ from supportagent.claims.schemas import Claim, ClaimDocument
 from supportagent.rag.builtin_seed import builtin_documents
 
 
-ROOT = Path(__file__).resolve().parents[1]
+def load_claim_fixtures(project_root: Path):
+    return json.loads(
+        (project_root / "data" / "synthetic_claims.json").read_text()
+    )
 
 
-def load_claim_fixtures():
-    return json.loads((ROOT / "data" / "synthetic_claims.json").read_text())
-
-
-def load_eval_cases():
-    return [json.loads(line) for line in (ROOT / "evals" / "claim_review.jsonl").read_text().splitlines()]
+def load_eval_cases(project_root: Path):
+    eval_path = project_root / "evals" / "claim_review.jsonl"
+    return [json.loads(line) for line in eval_path.read_text().splitlines()]
 
 
 def fixture_claim(item):
@@ -48,8 +48,8 @@ def fixture_documents(item):
     ]
 
 
-def test_synthetic_claim_dataset_matches_source_backed_rules():
-    fixtures = load_claim_fixtures()
+def test_synthetic_claim_dataset_matches_source_backed_rules(project_root: Path):
+    fixtures = load_claim_fixtures(project_root)
     assert len(fixtures) >= 12
     assert len({item["id"] for item in fixtures}) == len(fixtures)
     for item in fixtures:
@@ -57,9 +57,9 @@ def test_synthetic_claim_dataset_matches_source_backed_rules():
         assert actual == item["expected"]["missing_required"], item["id"]
 
 
-def test_eval_cases_reference_real_fixtures_and_match_expectations():
-    fixtures = {item["id"]: item for item in load_claim_fixtures()}
-    cases = load_eval_cases()
+def test_eval_cases_reference_real_fixtures_and_match_expectations(project_root: Path):
+    fixtures = {item["id"]: item for item in load_claim_fixtures(project_root)}
+    cases = load_eval_cases(project_root)
     assert len(cases) >= 12
     for case in cases:
         fixture = fixtures[case["claim_fixture"]]

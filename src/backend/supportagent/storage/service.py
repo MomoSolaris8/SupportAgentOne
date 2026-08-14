@@ -52,16 +52,28 @@ class SupabaseObjectStorage(ObjectStorage):
 
     def __init__(self) -> None:
         self.supabase_url = os.environ["SUPABASE_URL"].rstrip("/")
-        self.service_role_key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+        self.api_key = (
+            os.environ.get("SUPABASE_SECRET_KEY")
+            or os.environ.get("SUPABASE_SERVICE_ROLE_KEY")
+        )
+        if not self.api_key:
+            raise RuntimeError(
+                "Supabase storage requires SUPABASE_SECRET_KEY or "
+                "SUPABASE_SERVICE_ROLE_KEY"
+            )
         self.bucket = os.environ.get("SUPABASE_STORAGE_BUCKET", "supportagent-uploads")
 
     def _headers(self, content_type: str | None = None) -> dict[str, str]:
-        headers = {
-            "Authorization": f"Bearer {self.service_role_key}",
-            "apikey": self.service_role_key,
-        }
+        headers = {"apikey": self.api_key}
+
+        # Legacy service-role keys are JWTs and can be sent as bearer tokens.
+        # New secret keys authenticate through the apikey header only.
+        if not self.api_key.startswith("sb_secret_"):
+            headers["Authorization"] = f"Bearer {self.api_key}"
+
         if content_type:
             headers["Content-Type"] = content_type
+
         return headers
 
     def _object_url(self, bucket: str, key: str) -> str:

@@ -340,6 +340,8 @@ pyrightconfig.json
 
 # Secrets
 .env
+.env.*
+!.env.example
 evals/model_pricing.local.json
 
 # Local presentation exports

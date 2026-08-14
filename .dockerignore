@@ -16,3 +16,12 @@ src/frontend/tsconfig.tsbuildinfo
 
 screenshots
 data/raw
+
+# Local/generated files that must not enter Azure build context
+data/uploads
+agent-skeleton
+output
+tmp
+artifacts
+*.log
+.DS_Store

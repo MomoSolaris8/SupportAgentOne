@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "supportagent"
 version = "0.1.0"
@@ -35,3 +39,19 @@ include = ["supportagent*"]
 
 [tool.vercel]
 entrypoint = "supportagent.api:app"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = [
+  "--strict-config",
+  "--strict-markers",
+  "-ra",
+]
+markers = [
+  "unit: isolated deterministic tests without external infrastructure",
+  "component: in-process tests across multiple application modules",
+  "integration: tests against real infrastructure such as databases or storage",
+  "eval: AI quality evaluations based on datasets and scoring rules",
+  "live: tests that call real external AI providers and may incur cost",
+  "e2e: end-to-end tests against a deployed application",
+]

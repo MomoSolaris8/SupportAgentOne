@@ -107,3 +107,15 @@ def test_get_storage_supports_minio_alias(monkeypatch):
     monkeypatch.setattr("supportagent.storage.service.S3ObjectStorage", lambda: "s3-storage")
 
     assert get_storage() == "s3-storage"
+
+
+def test_supabase_new_secret_key_uses_apikey_without_bearer(monkeypatch):
+    monkeypatch.setenv("SUPABASE_URL", "https://project.supabase.co")
+    monkeypatch.setenv("SUPABASE_SECRET_KEY", "sb_secret_test")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "legacy-service-key")
+
+    storage = SupabaseObjectStorage()
+    headers = storage._headers()
+
+    assert headers["apikey"] == "sb_secret_test"
+    assert "Authorization" not in headers
