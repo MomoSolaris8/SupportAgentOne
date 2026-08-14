@@ -1,0 +1,155 @@
+name: Rollback Azure Dev
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: Full 40-character Git commit SHA to deploy
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: supportagent-azure-dev
+  cancel-in-progress: false
+
+env:
+  AZURE_RESOURCE_GROUP: rg-supportagent-dev
+  AZURE_CONTAINER_APP: ca-supportagent-api-dev
+  AZURE_CONTAINER_REGISTRY: acrsupportagentdev
+  IMAGE_REPOSITORY: supportagent-api
+
+jobs:
+  rollback:
+    name: Roll back backend image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: azure-dev
+
+    steps:
+      - name: Validate rollback image tag
+        shell: bash
+        env:
+          ROLLBACK_TAG: ${{ inputs.image_tag }}
+        run: |
+          if [[ ! "$ROLLBACK_TAG" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "image_tag must be a full 40-character lowercase Git commit SHA"
+            exit 1
+          fi
+
+      - name: Log in to Azure with OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Define rollback image URI
+        id: target
+        shell: bash
+        env:
+          ROLLBACK_TAG: ${{ inputs.image_tag }}
+        run: |
+          ACR_LOGIN_SERVER="$(az acr show \
+            --name "$AZURE_CONTAINER_REGISTRY" \
+            --query loginServer \
+            --output tsv)"
+
+          TARGET_IMAGE="${ACR_LOGIN_SERVER}/${IMAGE_REPOSITORY}:${ROLLBACK_TAG}"
+          echo "image_uri=${TARGET_IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "Rollback target: ${TARGET_IMAGE}"
+
+      - name: Verify rollback image exists
+        shell: bash
+        env:
+          ROLLBACK_TAG: ${{ inputs.image_tag }}
+        run: |
+          az acr repository show \
+            --name "$AZURE_CONTAINER_REGISTRY" \
+            --image "${IMAGE_REPOSITORY}:${ROLLBACK_TAG}" \
+            --output none
+
+          echo "Verified image: ${IMAGE_REPOSITORY}:${ROLLBACK_TAG}"
+
+      - name: Record current image
+        id: current
+        shell: bash
+        run: |
+          CURRENT_IMAGE="$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query 'properties.template.containers[0].image' \
+            --output tsv)"
+
+          echo "image_uri=${CURRENT_IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "Current image: ${CURRENT_IMAGE}"
+
+      - name: Update Azure Container App
+        run: |
+          az containerapp update \
+            --name "$AZURE_CONTAINER_APP" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --image "${{ steps.target.outputs.image_uri }}" \
+            --output none
+
+      - name: Verify deployed image
+        shell: bash
+        run: |
+          CURRENT_IMAGE="$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query 'properties.template.containers[0].image' \
+            --output tsv)"
+
+          EXPECTED_IMAGE="${{ steps.target.outputs.image_uri }}"
+
+          echo "Expected: ${EXPECTED_IMAGE}"
+          echo "Current:  ${CURRENT_IMAGE}"
+
+          test "$CURRENT_IMAGE" = "$EXPECTED_IMAGE"
+
+      - name: Check application readiness
+        shell: bash
+        run: |
+          FQDN="$(az containerapp show \
+            --name "$AZURE_CONTAINER_APP" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --query 'properties.configuration.ingress.fqdn' \
+            --output tsv)"
+
+          for attempt in {1..12}; do
+            echo "Readiness attempt ${attempt}/12"
+
+            STATUS="$(curl \
+              --silent \
+              --show-error \
+              --output /tmp/ready.json \
+              --write-out '%{http_code}' \
+              --max-time 20 \
+              "https://${FQDN}/ready" || true)"
+
+            if [ "$STATUS" = "200" ]; then
+              cat /tmp/ready.json
+              exit 0
+            fi
+
+            sleep 10
+          done
+
+          echo "Rolled-back application did not become ready"
+          cat /tmp/ready.json 2>/dev/null || true
+          exit 1
+
+      - name: Write rollback summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### Azure Dev rollback"
+            echo "- Previous image: ${{ steps.current.outputs.image_uri }}"
+            echo "- Target image: ${{ steps.target.outputs.image_uri }}"
+            echo "- Requested by: ${{ github.actor }}"
+          } >> "$GITHUB_STEP_SUMMARY"
