@@ -12,6 +12,7 @@ dependencies = [
     "anthropic",
     "psycopg[binary]",
     "python-dotenv",
+    "pyyaml",
     "pgvector",
     "fastapi",
     "uvicorn",

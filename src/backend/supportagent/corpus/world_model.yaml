@@ -1,0 +1,733 @@
+# World model for the synthetic German insurance knowledge base.
+#
+# Fictional content written for this project; not copied from any real insurer.
+# Umlauts are transliterated (ae/oe/ue/ss) to match the existing seed content.
+#
+# Every fact below becomes (a) a statement on exactly one canonical page or Jira
+# comment and (b) one or more gold evaluation cases. Difficulty comes from the
+# structure, not from the volume:
+#   - tariff variants     -> near-identical distractor pages
+#   - superseded editions -> a plausible but outdated answer stays retrievable
+#   - placement jira_only -> the answer exists only in a Jira resolution
+#   - visibility restricted -> must never reach an unprivileged asker
+#   - out_of_scope        -> must be refused
+
+insurer:
+  name: Meridian Versicherung AG
+  locale: de-DE
+  kb_label: insurance-kb
+
+sections:
+  - key: privatkunden
+    title: Privatkundenprodukte
+    body: >-
+      <p>Produktdokumentation fuer die privaten Versicherungsprodukte der Meridian
+      Versicherung AG. Verbindlich sind die jeweils gueltigen Versicherungsbedingungen.</p>
+  - key: kfz
+    title: Kfz-Versicherung
+    body: >-
+      <p>Produkt- und Schadeninformationen rund um Kfz-Versicherungen.</p>
+  - key: schadenbearbeitung
+    title: Schadenbearbeitung
+    body: >-
+      <p>Prozesse rund um Schadenmeldung, Bearbeitung und Eskalation, uebergreifend
+      fuer alle Versicherungsprodukte.</p>
+  - key: archiv
+    title: Archiv - Abgeloeste Bedingungswerke
+    body: >-
+      <p>Historische Bedingungswerke. Diese Seiten sind nicht mehr gueltig und dienen
+      ausschliesslich der Nachvollziehbarkeit von Altvertraegen.</p>
+  - key: intern
+    title: Intern - Nur Fachbereich
+    body: >-
+      <p>Interne Arbeitsanweisungen. Nicht fuer die Kundenkommunikation bestimmt.</p>
+    restricted: true
+
+products:
+  - key: hausrat
+    section: privatkunden
+    name: Hausratversicherung
+    summary: >-
+      Absicherung des gesamten Hausrats gegen Feuer, Einbruchdiebstahl,
+      Leitungswasser sowie Sturm und Hagel.
+    tariffs: [Basis, Komfort, Premium]
+
+  - key: haftpflicht
+    section: privatkunden
+    name: Private Haftpflichtversicherung
+    summary: >-
+      Schutz vor Schadenersatzanspruechen Dritter bei Personen-, Sach- und
+      Vermoegensschaeden.
+    tariffs: [Basis, Komfort, Premium]
+
+  - key: rechtsschutz
+    section: privatkunden
+    name: Rechtsschutzversicherung
+    summary: >-
+      Uebernahme von Anwalts-, Gerichts- und Sachverstaendigenkosten in den
+      versicherten Rechtsbereichen.
+    tariffs: [Basis, Premium]
+
+  - key: wohngebaeude
+    section: privatkunden
+    name: Wohngebaeudeversicherung
+    summary: >-
+      Absicherung des Gebaeudes selbst gegen Feuer, Leitungswasser, Sturm und Hagel
+      sowie optional Elementargefahren.
+    tariffs: [Basis, Premium]
+
+  - key: kfz
+    section: kfz
+    name: Kfz-Versicherung
+    summary: >-
+      Haftpflicht-, Teilkasko- und Vollkaskoschutz fuer Personenkraftwagen.
+    tariffs: [Basis, Komfort, Premium]
+    superseded:
+      # The 2022 edition charged a deductible on glass damage in Komfort. The
+      # current edition waives it. Both pages remain retrievable.
+      - label: "2022-01"
+        valid_from: 2022-01-01
+        valid_to: 2023-12-31
+        overrides:
+          kfz.glasschaden.sb:
+            Komfort: "150 EUR je Glasschaden"
+          kfz.teilkasko.sb:
+            Komfort: "500 EUR je Schadenfall"
+
+processes:
+  - key: schadenmeldung
+    section: schadenbearbeitung
+    name: Schadenmeldung
+    summary: >-
+      Ablauf von der Erstmeldung bis zur Vollstaendigkeitspruefung der Unterlagen.
+  - key: eskalation
+    section: schadenbearbeitung
+    name: Eskalationsprozesse
+    summary: >-
+      Wann ein Schadenfall den First-Level-Support verlaesst und an einen
+      Fachbereich uebergeben wird.
+  - key: kundenkommunikation
+    section: schadenbearbeitung
+    name: Kundenkommunikation
+    summary: >-
+      Verbindliche Reaktionszeiten und Kanaele im Kundenkontakt.
+
+facts:
+  # ---- Hausrat ------------------------------------------------------------
+  - id: hausrat.fahrraddiebstahl.aussen
+    subject: hausrat
+    topic: Fahrraddiebstahl
+    attribute: Entschaedigung bei Fahrraddiebstahl ausserhalb der Wohnung
+    variants:
+      - tariff: Basis
+        value: nicht versichert
+        detail: >-
+          Versichert ist ausschliesslich der Diebstahl aus der Wohnung, dem Keller
+          oder einer abgeschlossenen Garage, sofern Einbruchspuren vorliegen.
+      - tariff: Komfort
+        value: bis 1.000 EUR
+        detail: >-
+          Voraussetzung ist ein verkehrsueblich abgeschlossenes Schloss; der
+          Kaufbeleg des Schlosses ist auf Verlangen vorzulegen.
+      - tariff: Premium
+        value: bis 5.000 EUR
+        detail: >-
+          Eingeschlossen sind auch E-Bikes bis 25 km/h ohne gesonderte Anmeldung.
+    questions:
+      - "Ist mein Fahrrad im Tarif {tariff} versichert, wenn es vor dem Supermarkt gestohlen wird?"
+      - "Wie hoch ist die Entschaedigung bei Fahrraddiebstahl auf der Strasse im {subject}-Tarif {tariff}?"
+
+  - id: hausrat.wertsachen.grenze
+    subject: hausrat
+    topic: Wertsachen
+    attribute: Entschaedigungsgrenze fuer Wertsachen
+    variants:
+      - tariff: Basis
+        value: 20 Prozent der Versicherungssumme
+      - tariff: Komfort
+        value: 30 Prozent der Versicherungssumme
+      - tariff: Premium
+        value: 50 Prozent der Versicherungssumme
+    questions:
+      - "Bis zu welchem Anteil der Versicherungssumme sind Wertsachen im Tarif {tariff} der {subject} entschaedigt?"
+
+  - id: hausrat.sb.standard
+    subject: hausrat
+    topic: Selbstbeteiligung
+    attribute: Selbstbeteiligung je Schadenfall
+    variants:
+      - tariff: Basis
+        value: 150 EUR
+      - tariff: Komfort
+        value: 150 EUR
+      - tariff: Premium
+        value: 0 EUR
+    questions:
+      - "Welche Selbstbeteiligung gilt in der {subject} im Tarif {tariff}?"
+
+  - id: hausrat.grobe_fahrlaessigkeit
+    subject: hausrat
+    topic: Grobe Fahrlaessigkeit
+    attribute: Leistung bei grober Fahrlaessigkeit
+    variants:
+      - tariff: Basis
+        value: Kuerzung entsprechend der Schwere des Verschuldens
+      - tariff: Komfort
+        value: mitversichert bis 5.000 EUR
+      - tariff: Premium
+        value: in voller Hoehe mitversichert
+    questions:
+      - "Zahlt die {subject} im Tarif {tariff}, wenn ich den Schaden grob fahrlaessig verursacht habe?"
+
+  - id: hausrat.aussenversicherung.dauer
+    subject: hausrat
+    topic: Aussenversicherung
+    attribute: Dauer der Aussenversicherung bei voruebergehender Auslagerung
+    variants:
+      - tariff: Basis
+        value: 3 Monate
+      - tariff: Komfort
+        value: 6 Monate
+      - tariff: Premium
+        value: 12 Monate
+    questions:
+      - "Wie lange gilt die Aussenversicherung der {subject} im Tarif {tariff}?"
+
+  - id: hausrat.elementar.ueberschwemmung
+    subject: hausrat
+    topic: Elementargefahren
+    attribute: Absicherung von Ueberschwemmung und Rueckstau
+    variants:
+      - tariff: Basis
+        value: nicht enthalten
+      - tariff: Komfort
+        value: optional zubuchbar
+        detail: Der Zusatzbaustein ist nur in den Zonen ZUERS 1 und 2 abschliessbar.
+      - tariff: Premium
+        value: enthalten bis zur Versicherungssumme
+    questions:
+      - "Sind Ueberschwemmungsschaeden in der {subject} im Tarif {tariff} abgedeckt?"
+
+  - id: hausrat.aquarium.wasserschaden
+    subject: hausrat
+    topic: Leitungswasser
+    attribute: Wasserschaeden aus Aquarien und Wasserbetten
+    placement: jira_only
+    variants:
+      - value: mitversichert, sofern das Behaeltnis fest installiert ist
+        detail: >-
+          Ein transportables Wasserbett ohne feste Installation gilt nicht als
+          bestimmungswidrig ausgetretenes Leitungswasser.
+    questions:
+      - "Ist ein Wasserschaden durch ein geplatztes Aquarium ueber die Hausratversicherung gedeckt?"
+
+  # ---- Haftpflicht --------------------------------------------------------
+  - id: haftpflicht.deckungssumme
+    subject: haftpflicht
+    topic: Deckungssumme
+    attribute: Pauschale Deckungssumme fuer Personen- und Sachschaeden
+    variants:
+      - tariff: Basis
+        value: 5 Mio. EUR
+      - tariff: Komfort
+        value: 10 Mio. EUR
+      - tariff: Premium
+        value: 50 Mio. EUR
+    questions:
+      - "Wie hoch ist die Deckungssumme der {subject} im Tarif {tariff}?"
+
+  - id: haftpflicht.gefaelligkeitsschaeden
+    subject: haftpflicht
+    topic: Gefaelligkeitsschaeden
+    attribute: Entschaedigung bei Gefaelligkeitsschaeden
+    variants:
+      - tariff: Basis
+        value: nicht versichert
+      - tariff: Komfort
+        value: bis 10.000 EUR
+      - tariff: Premium
+        value: bis 50.000 EUR
+    questions:
+      - "Zahlt die {subject} im Tarif {tariff}, wenn ich beim Umzugshelfen etwas kaputt mache?"
+
+  - id: haftpflicht.schluesselverlust
+    subject: haftpflicht
+    topic: Schluesselverlust
+    attribute: Entschaedigung bei Verlust fremder Schluessel
+    variants:
+      - tariff: Basis
+        value: nicht versichert
+      - tariff: Komfort
+        value: bis 15.000 EUR
+      - tariff: Premium
+        value: bis 100.000 EUR
+        detail: Eingeschlossen sind auch Kosten fuer den Austausch von Schliessanlagen.
+    questions:
+      - "Ist der Verlust des Buero-Generalschluessels in der {subject} Tarif {tariff} versichert?"
+
+  - id: haftpflicht.deliktunfaehige_kinder
+    subject: haftpflicht
+    topic: Deliktunfaehige Kinder
+    attribute: Schaeden durch deliktunfaehige Kinder unter sieben Jahren
+    variants:
+      - tariff: Basis
+        value: nicht versichert
+      - tariff: Komfort
+        value: bis 25.000 EUR
+      - tariff: Premium
+        value: bis 100.000 EUR
+    questions:
+      - "Mein fuenfjaehriges Kind hat ein fremdes Auto zerkratzt - zahlt die {subject} im Tarif {tariff}?"
+
+  - id: haftpflicht.forderungsausfall
+    subject: haftpflicht
+    topic: Forderungsausfall
+    attribute: Forderungsausfalldeckung
+    variants:
+      - tariff: Basis
+        value: nicht enthalten
+      - tariff: Komfort
+        value: nicht enthalten
+      - tariff: Premium
+        value: enthalten ab 2.500 EUR Schadenhoehe
+    questions:
+      - "Greift die Forderungsausfalldeckung der {subject} im Tarif {tariff}?"
+
+  # ---- Rechtsschutz -------------------------------------------------------
+  - id: rechtsschutz.wartezeit
+    subject: rechtsschutz
+    topic: Wartezeit
+    attribute: Wartezeit nach Vertragsbeginn
+    variants:
+      - value: 3 Monate
+        detail: >-
+          Keine Wartezeit gilt im Verkehrs-Rechtsschutz sowie bei Schadenersatz-
+          anspruechen aus unerlaubter Handlung.
+    questions:
+      - "Ab wann kann ich meine Rechtsschutzversicherung nutzen?"
+      - "Gibt es bei der Rechtsschutzversicherung eine Wartezeit im Verkehrsrecht?"
+
+  - id: rechtsschutz.mediation
+    subject: rechtsschutz
+    topic: Mediation
+    attribute: Uebernahme von Mediationskosten
+    variants:
+      - tariff: Basis
+        value: nicht enthalten
+      - tariff: Premium
+        value: enthalten fuer alle versicherten Rechtsbereiche
+        detail: >-
+          Umfasst ausdruecklich auch Nachbarschaftsstreitigkeiten im Rahmen des
+          Privat-Rechtsschutzes, sofern der Streitgegenstand gedeckt ist.
+    questions:
+      - "Werden Mediationskosten bei einem Nachbarschaftsstreit im Tarif {tariff} uebernommen?"
+
+  - id: rechtsschutz.selbstbeteiligung
+    subject: rechtsschutz
+    topic: Selbstbeteiligung
+    attribute: Selbstbeteiligung je Rechtsschutzfall
+    variants:
+      - tariff: Basis
+        value: 300 EUR
+      - tariff: Premium
+        value: 150 EUR
+    questions:
+      - "Wie hoch ist die Selbstbeteiligung der {subject} im Tarif {tariff}?"
+
+  - id: rechtsschutz.baurisiko
+    subject: rechtsschutz
+    topic: Ausschluesse
+    attribute: Streitigkeiten rund um Baumassnahmen
+    variants:
+      - value: vom Versicherungsschutz ausgeschlossen
+        detail: >-
+          Ausgeschlossen sind Streitigkeiten aus Planung, Errichtung und
+          genehmigungspflichtigem Umbau von Gebaeuden - tarifuebergreifend.
+    questions:
+      - "Uebernimmt die Rechtsschutzversicherung einen Streit mit meinem Bautraeger?"
+
+  # ---- Wohngebaeude -------------------------------------------------------
+  - id: wohngebaeude.leitungswasser.meldefrist
+    subject: wohngebaeude
+    topic: Leitungswasser
+    attribute: Meldefrist bei Leitungswasserschaeden
+    variants:
+      - value: unverzueglich, spaetestens innerhalb von 7 Tagen
+        detail: >-
+          Die vertragliche Frist betraegt einheitlich 7 Tage. Die intern
+          kommunizierte 48-Stunden-Angabe ist keine Frist, sondern eine Empfehlung
+          zur Schadenminimierung.
+    questions:
+      - "Wie schnell muss ich einen Leitungswasserschaden am Gebaeude melden?"
+
+  - id: wohngebaeude.elementar
+    subject: wohngebaeude
+    topic: Elementargefahren
+    attribute: Absicherung von Elementarschaeden
+    variants:
+      - tariff: Basis
+        value: optional zubuchbar
+      - tariff: Premium
+        value: enthalten
+    questions:
+      - "Sind Elementarschaeden in der {subject} im Tarif {tariff} versichert?"
+
+  - id: wohngebaeude.photovoltaik
+    subject: wohngebaeude
+    topic: Photovoltaik
+    attribute: Mitversicherung von Photovoltaikanlagen auf dem Dach
+    variants:
+      - tariff: Basis
+        value: nicht mitversichert
+      - tariff: Premium
+        value: mitversichert bis 25.000 EUR
+    questions:
+      - "Ist meine Photovoltaikanlage ueber die {subject} im Tarif {tariff} abgedeckt?"
+
+  - id: wohngebaeude.grobe_fahrlaessigkeit
+    subject: wohngebaeude
+    topic: Grobe Fahrlaessigkeit
+    attribute: Leistung bei grober Fahrlaessigkeit
+    variants:
+      - tariff: Basis
+        value: Kuerzung entsprechend der Schwere des Verschuldens
+      - tariff: Premium
+        value: in voller Hoehe mitversichert
+    questions:
+      - "Wird bei grober Fahrlaessigkeit in der {subject} Tarif {tariff} gekuerzt?"
+
+  # ---- Kfz ----------------------------------------------------------------
+  - id: kfz.glasschaden.sb
+    subject: kfz
+    topic: Glasschaden
+    attribute: Selbstbeteiligung bei reinen Glasschaeden
+    variants:
+      - tariff: Basis
+        value: 150 EUR je Glasschaden
+      - tariff: Komfort
+        value: 0 EUR bei Reparatur, 150 EUR bei Austausch
+      - tariff: Premium
+        value: 0 EUR
+    questions:
+      - "Muss ich bei einem Steinschlag an der Windschutzscheibe im Tarif {tariff} eine Selbstbeteiligung zahlen?"
+
+  - id: kfz.teilkasko.sb
+    subject: kfz
+    topic: Selbstbeteiligung
+    attribute: Selbstbeteiligung in der Teilkasko
+    variants:
+      - tariff: Basis
+        value: 500 EUR je Schadenfall
+      - tariff: Komfort
+        value: 300 EUR je Schadenfall
+      - tariff: Premium
+        value: 150 EUR je Schadenfall
+    questions:
+      - "Wie hoch ist die Teilkasko-Selbstbeteiligung im Tarif {tariff}?"
+
+  - id: kfz.vollkasko.sb
+    subject: kfz
+    topic: Selbstbeteiligung
+    attribute: Selbstbeteiligung in der Vollkasko
+    variants:
+      - tariff: Basis
+        value: 1.000 EUR je Schadenfall
+      - tariff: Komfort
+        value: 500 EUR je Schadenfall
+      - tariff: Premium
+        value: 300 EUR je Schadenfall
+    questions:
+      - "Welche Selbstbeteiligung gilt in der Vollkasko im Tarif {tariff}?"
+
+  - id: kfz.werkstattbindung
+    subject: kfz
+    topic: Werkstattbindung
+    attribute: Wahl der Reparaturwerkstatt
+    variants:
+      - tariff: Basis
+        value: Werkstattbindung verpflichtend
+        detail: Bei Reparatur ausserhalb des Partnernetzes werden nur 85 Prozent erstattet.
+      - tariff: Komfort
+        value: Werkstattbindung optional gegen Beitragsnachlass
+      - tariff: Premium
+        value: freie Werkstattwahl
+    questions:
+      - "Darf ich im Tarif {tariff} meine eigene Werkstatt waehlen?"
+
+  - id: kfz.marderbiss.folgeschaeden
+    subject: kfz
+    topic: Marderbiss
+    attribute: Entschaedigung von Folgeschaeden nach Marderbiss
+    variants:
+      - tariff: Basis
+        value: nur der unmittelbare Bissschaden
+      - tariff: Komfort
+        value: Folgeschaeden bis 3.000 EUR
+      - tariff: Premium
+        value: Folgeschaeden ohne Begrenzung
+    questions:
+      - "Sind Folgeschaeden nach einem Marderbiss im Tarif {tariff} versichert?"
+
+  - id: kfz.rabattschutz
+    subject: kfz
+    topic: Schadenfreiheitsklasse
+    attribute: Rabattschutz nach dem ersten Schaden im Kalenderjahr
+    variants:
+      - tariff: Basis
+        value: nicht verfuegbar
+      - tariff: Komfort
+        value: optional zubuchbar ab SF-Klasse 4
+      - tariff: Premium
+        value: enthalten ab SF-Klasse 4
+    questions:
+      - "Bleibt meine Schadenfreiheitsklasse im Tarif {tariff} nach einem Schaden erhalten?"
+
+  - id: kfz.mietwagen.klasse
+    subject: kfz
+    topic: Mietwagen
+    attribute: Erstattungsfaehige Mietwagenklasse waehrend der Reparatur
+    placement: jira_only
+    variants:
+      - value: eine Fahrzeugklasse unter dem versicherten Fahrzeug
+        detail: >-
+          Die Erstattung ist auf 14 Kalendertage begrenzt; darueber hinausgehende
+          Tage sind nur nach Einzelfallpruefung erstattungsfaehig.
+    questions:
+      - "Welche Mietwagenklasse wird waehrend der Reparatur meines Fahrzeugs erstattet?"
+
+  # ---- Prozesse -----------------------------------------------------------
+  - id: schadenmeldung.frist
+    subject: schadenmeldung
+    topic: Fristen
+    attribute: Allgemeine Meldefrist fuer Schaeden
+    variants:
+      - value: unverzueglich, spaetestens innerhalb von 7 Tagen nach Kenntnis
+    questions:
+      - "Innerhalb welcher Frist muss ein Schaden gemeldet werden?"
+
+  - id: schadenmeldung.unterlagen.kfz
+    subject: schadenmeldung
+    topic: Unterlagen
+    attribute: Erforderliche Unterlagen bei einem Kfz-Unfall
+    variants:
+      - value: >-
+          Schadenanzeige, Europaeischer Unfallbericht, Fotos der Schadenstelle,
+          Kostenvoranschlag oder Gutachten sowie bei Personenschaden das
+          polizeiliche Aktenzeichen
+    questions:
+      - "Was muss ich nach einem Kfz-Unfall einreichen?"
+
+  - id: schadenmeldung.vollstaendigkeit
+    subject: schadenmeldung
+    topic: Vollstaendigkeitspruefung
+    attribute: Frist fuer die Nachforderung fehlender Unterlagen
+    variants:
+      - value: innerhalb von 5 Werktagen nach Eingang der Schadenanzeige
+    questions:
+      - "Wie schnell meldet sich die Schadenabteilung, wenn Unterlagen fehlen?"
+
+  - id: eskalation.betragsgrenze
+    subject: eskalation
+    topic: Eskalationsschwellen
+    attribute: Betragsgrenze fuer die Abgabe an den Fachbereich
+    variants:
+      - value: ab 25.000 EUR geschaetzter Schadenhoehe
+        detail: >-
+          Unterhalb der Grenze entscheidet der First-Level-Support eigenstaendig,
+          sofern kein Betrugsverdacht vorliegt.
+    questions:
+      - "Ab welcher Schadenhoehe muss ein Fall an den Fachbereich abgegeben werden?"
+
+  - id: eskalation.betrugsverdacht.kanal
+    subject: eskalation
+    topic: Betrugsverdacht
+    attribute: Meldekanal bei Verdacht auf Versicherungsbetrug
+    placement: jira_only
+    variants:
+      - value: ueber die Jira-Queue SIU-INTAKE, nicht per E-Mail
+        detail: >-
+          Der Vorgang ist zusaetzlich mit dem Label 'siu-pruefung' zu versehen.
+          Eine direkte Kontaktaufnahme mit dem Kunden ist zu unterlassen.
+    questions:
+      - "Ueber welchen Kanal melde ich einen Verdacht auf Versicherungsbetrug?"
+
+  - id: kundenkommunikation.reaktionszeit
+    subject: kundenkommunikation
+    topic: Reaktionszeiten
+    attribute: Verbindliche Erstreaktionszeit auf Kundenanfragen
+    variants:
+      - value: 2 Werktage im Schriftverkehr, 1 Werktag bei telefonischer Zusage
+    questions:
+      - "Wie schnell muss auf eine schriftliche Kundenanfrage reagiert werden?"
+
+  # ---- Interne Fakten (duerfen nie an Kunden gelangen) --------------------
+  - id: intern.kulanz.grenze
+    subject: eskalation
+    topic: Kulanz
+    attribute: Kulanzgrenze ohne Freigabe durch die Teamleitung
+    visibility: restricted
+    variants:
+      - value: bis 2.500 EUR
+        detail: >-
+          Kulanzentscheidungen sind im Vorgang zu begruenden und monatlich an das
+          Qualitaetsmanagement zu berichten.
+    questions:
+      - "Bis zu welchem Betrag darf ich einem Kunden eine Kulanzzahlung anbieten?"
+
+  - id: intern.betrugsindikatoren
+    subject: eskalation
+    topic: Betrugsverdacht
+    attribute: Indikatorenliste fuer eine SIU-Pruefung
+    visibility: restricted
+    variants:
+      - value: >-
+          Schaden innerhalb von 60 Tagen nach Vertragsbeginn, kurzfristige
+          Erhoehung der Versicherungssumme, wiederholte Bargeldschaeden ohne Beleg
+    questions:
+      - "Welche Indikatoren loesen eine Betrugspruefung aus?"
+
+  - id: intern.vergleichsquote
+    subject: eskalation
+    topic: Verhandlung
+    attribute: Interne Zielquote bei aussergerichtlichen Vergleichen
+    visibility: restricted
+    variants:
+      - value: 65 Prozent der geltend gemachten Forderung
+    questions:
+      - "Welche Vergleichsquote soll bei aussergerichtlichen Einigungen erreicht werden?"
+
+# Narrative shells for issues about facts that live in Confluence. These are
+# deliberately *hard negatives*: high lexical overlap with the question, but they
+# never restate the value - they point at the authoritative page instead. That
+# keeps the canonical home unambiguous while making retrieval genuinely harder.
+# Templates may use {subject}, {attribute}, {tariff} and {home}.
+jira_patterns:
+  - key: doku-luecke
+    issue_type: Task
+    labels: [doku-luecke]
+    summary: "Doku-Luecke: {attribute} bei {subject} ({tariff})"
+    description: >-
+      Mehrere Support-Anfragen betreffen {attribute} in der {subject}. Im
+      Tarif {tariff} ist die Angabe fuer neue Kolleginnen und Kollegen nicht
+      eindeutig auffindbar, sodass unterschiedlich auskunftet wird. Bitte pruefen
+      und die Verlinkung im Wissensbestand vereinheitlichen.
+    resolution: >-
+      Ruecksprache mit dem Produktmanagement: Die verbindliche Angabe steht
+      ausschliesslich im Artikel '{home}'. In diesem Vorgang wird bewusst keine
+      eigene Zahl hinterlegt, damit bei einer Bedingungsaenderung keine zweite
+      Quelle gepflegt werden muss.
+    statuses: [Done]
+
+  - key: kundenanfrage
+    issue_type: Task
+    labels: [faq, kundenanfrage]
+    summary: "Kundenanfrage zu {attribute} im Tarif {tariff}"
+    description: >-
+      Ein Kunde mit Tarif {tariff} der {subject} fragt nach {attribute}. Die
+      Auskunft wurde anhand des Produktartikels erteilt, der Vorgang dient nur
+      der Nachvollziehbarkeit.
+    resolution: >-
+      Auskunft erfolgte auf Basis von '{home}'. Antwort an den Kunden ist raus,
+      keine Abweichung vom dokumentierten Stand.
+    statuses: [Done, In Review]
+
+  - key: onboarding
+    issue_type: Task
+    labels: [onboarding, faq]
+    summary: "Onboarding-Frage zu {attribute} ({subject})"
+    description: >-
+      Eine neue Kollegin im Support fragt, wo {attribute} in der {subject}
+      verbindlich geregelt ist und welche Quelle im Zweifel gilt.
+    resolution: >-
+      Fuehrende Quelle ist der Produktartikel '{home}'. Die FAQ-Seiten und dieser
+      Vorgang verweisen lediglich darauf und enthalten keine eigenen Werte.
+    statuses: [Done]
+
+  - key: offen-unklar
+    issue_type: Task
+    labels: [doku-luecke, offen]
+    summary: "Unklare Formulierung zu {attribute} in der {subject}"
+    description: >-
+      Die Formulierung zu {attribute} laesst im Tarif {tariff} Interpretations-
+      spielraum. Vor einer Aenderung ist die Rechtsabteilung einzubinden.
+      Aktuell liegt noch keine abschliessende Bewertung vor.
+    # Still open: no resolution comment at all, so it carries no answer.
+    resolution: null
+    statuses: [To Do, In Progress]
+
+# Issues for facts with placement=jira_only. Here the resolution comment *is* the
+# canonical home, which is what makes cross-source retrieval testable.
+jira_only_patterns:
+  - key: fachbereich-klaerung
+    issue_type: Task
+    labels: [doku-luecke, klaerung]
+    summary: "Klaerung Fachbereich: {attribute} ({subject})"
+    description: >-
+      {attribute} ist im Wissensbestand nicht dokumentiert. Der Fachbereich wurde
+      um eine verbindliche Aussage gebeten, damit der Support einheitlich
+      auskunften kann.
+    resolution: >-
+      Verbindliche Auskunft des Fachbereichs: {attribute} - {value}. {detail}
+      Uebernahme in Confluence ist beauftragt, bis dahin gilt dieser Vorgang als
+      fuehrende Quelle.
+    statuses: [Done]
+
+# Pure operational chatter - retrievable noise with no answerable fact.
+noise_patterns:
+  - key: dashboard
+    labels: [betrieb]
+    summary: "Reporting-Dashboard Schadenquote laedt langsam"
+    description: >-
+      Das Dashboard zur Schadenquote benoetigt seit dem letzten Release deutlich
+      laenger zum Laden. Betrifft nur die Monatsansicht.
+    comments:
+      - "Ursache war ein fehlender Index auf der Auswertungstabelle. Nach dem Deployment wieder unauffaellig."
+    statuses: [Done]
+  - key: postfach
+    labels: [betrieb]
+    summary: "Sammelpostfach Schaden laeuft ueber"
+    description: >-
+      Das Sammelpostfach der Schadenabteilung erreicht regelmaessig das
+      Speicherlimit. Bitte Archivierungsregel einrichten.
+    comments:
+      - "Archivierungsregel ist aktiv: Nachrichten aelter als 180 Tage werden automatisch verschoben."
+    statuses: [Done]
+  - key: schulung
+    labels: [organisation]
+    summary: "Schulungstermin Produktupdate abstimmen"
+    description: >-
+      Fuer das kommende Produktupdate ist ein Schulungstermin mit dem
+      First-Level-Support abzustimmen. Raum und Termin stehen noch nicht fest.
+    comments: []
+    statuses: [To Do, In Progress]
+  - key: vorlage
+    labels: [organisation]
+    summary: "Briefvorlage Schadenbestaetigung aktualisieren"
+    description: >-
+      Die Briefvorlage fuer die Schadenbestaetigung enthaelt noch das alte Logo
+      und eine veraltete Telefonnummer im Fussbereich.
+    comments:
+      - "Neue Vorlage liegt im Vorlagenordner, alte Version wurde deaktiviert."
+    statuses: [Done]
+
+# Questions that no document in the corpus can answer - the system must refuse
+# rather than improvise from loosely related pages.
+out_of_scope:
+  - id: wetter
+    question: Wie ist das Wetter morgen in Berlin?
+    reason: Keine Versicherungsfrage und kein Bezug zu einem Dokument im Wissensbestand.
+  - id: krankenversicherung
+    question: Was kostet bei euch eine private Krankenvollversicherung?
+    reason: Die Meridian Versicherung AG fuehrt keine Krankenversicherung im Produktportfolio.
+  - id: aktienkurs
+    question: Wie hat sich die Aktie der Meridian Versicherung AG im letzten Quartal entwickelt?
+    reason: Kapitalmarktinformationen sind nicht Teil des Support-Wissensbestands.
+  - id: hausrat-tarif-xl
+    question: Welche Leistungen bietet der Hausrat-Tarif XL?
+    reason: Ein Tarif XL existiert nicht; plausibel klingender, aber erfundener Tarifname.
+  - id: kuendigungsfrist-gewerbe
+    question: Welche Kuendigungsfrist gilt fuer eine gewerbliche Betriebshaftpflicht?
+    reason: Gewerbliche Produkte sind im Privatkunden-Wissensbestand nicht dokumentiert.
+  - id: schadenstand-konkret
+    question: Wie ist der aktuelle Bearbeitungsstand von Schadenfall SC-4711?
+    reason: Einzelfallstatus liegt im Bestandssystem, nicht im Wissensbestand.

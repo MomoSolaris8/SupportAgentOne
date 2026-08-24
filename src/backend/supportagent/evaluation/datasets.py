@@ -43,6 +43,11 @@ class RAGEvalCase(BaseModel):
     category: str
     expected_sources: list[str]
     expect_refusal: bool = False
+    # Documents that look right but are not: sibling tariff pages, superseded
+    # archive pages, restricted pages. Populated by the corpus generator; empty
+    # for the hand-written cases.
+    must_not_use: list[str] = []
+    expected_answer: str | None = None
 
 
 def load_jsonl(path: Path) -> list[dict[str, Any]]:
