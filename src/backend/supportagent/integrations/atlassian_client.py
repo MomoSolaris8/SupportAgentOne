@@ -1,7 +1,13 @@
 import base64
 import json
-from urllib.parse import urlencode
+from collections.abc import Iterator
+from urllib.parse import parse_qs, urlencode, urlparse
 from urllib.request import Request, urlopen
+
+# Both APIs are cursor based and neither reports a total, so the only stop
+# condition is "no next cursor". A repeated cursor would loop forever, so it is
+# treated as the end of the result set as well.
+_MAX_PAGES = 1000
 
 
 class AtlassianClient:
@@ -41,28 +47,66 @@ class AtlassianClient:
         payload = self._get("/wiki/api/v2/spaces", {"keys": space_key})
         return payload["results"][0]["id"]
 
-    def fetch_confluence_pages(self, space_id: str, cursor: str | None = None) -> tuple[list[dict], str | None]:
-        params = {"space-id": space_id, "limit": "50", "body-format": "storage"}
+    @staticmethod
+    def _cursor_from_next_link(payload: dict) -> str | None:
+        """Confluence returns the next page as a URL, not a bare cursor."""
+        next_link = payload.get("_links", {}).get("next")
+        if not next_link:
+            return None
+        cursors = parse_qs(urlparse(next_link).query).get("cursor")
+        return cursors[0] if cursors else None
+
+    def fetch_confluence_pages(
+        self, space_id: str, cursor: str | None = None, limit: int = 50
+    ) -> tuple[list[dict], str | None]:
+        """One page of results plus the cursor for the next one (None when done)."""
+        params = {"space-id": space_id, "limit": str(limit), "body-format": "storage"}
         if cursor:
             params["cursor"] = cursor
         payload = self._get("/wiki/api/v2/pages", params)
-        next_link = payload.get("_links", {}).get("next")
-        return payload["results"], next_link
+        return payload["results"], self._cursor_from_next_link(payload)
+
+    def iter_confluence_pages(self, space_id: str, limit: int = 50) -> Iterator[dict]:
+        """Every page in the space, following cursors until they run out."""
+        cursor: str | None = None
+        seen_cursors: set[str] = set()
+        for _ in range(_MAX_PAGES):
+            pages, cursor = self.fetch_confluence_pages(space_id, cursor, limit)
+            yield from pages
+            if not cursor or cursor in seen_cursors:
+                return
+            seen_cursors.add(cursor)
+        raise RuntimeError(f"confluence pagination exceeded {_MAX_PAGES} requests")
 
     def fetch_confluence_labels(self, page_id: str) -> list[str]:
         payload = self._get(f"/wiki/api/v2/pages/{page_id}/labels")
         return [label["name"] for label in payload.get("results", [])]
 
-    def fetch_jira_issues(self, jql: str, next_page_token: str | None = None) -> tuple[list[dict], str | None]:
+    def fetch_jira_issues(
+        self, jql: str, next_page_token: str | None = None, max_results: int = 50
+    ) -> tuple[list[dict], str | None]:
+        """One page of issues plus the token for the next one (None when done)."""
         params = {
             "jql": jql,
-            "maxResults": "50",
+            "maxResults": str(max_results),
             "fields": "summary,description,comment,labels,status,updated,project,issuetype",
         }
         if next_page_token:
             params["nextPageToken"] = next_page_token
         payload = self._get("/rest/api/3/search/jql", params)
         return payload.get("issues", []), payload.get("nextPageToken")
+
+    def iter_jira_issues(self, jql: str, max_results: int = 50) -> Iterator[dict]:
+        """Every issue matching the JQL, following nextPageToken until exhausted."""
+        token: str | None = None
+        seen_tokens: set[str] = set()
+        for _ in range(_MAX_PAGES):
+            issues, token = self.fetch_jira_issues(jql, token, max_results)
+            yield from issues
+            if not token or token in seen_tokens:
+                return
+            seen_tokens.add(token)
+        raise RuntimeError(f"jira pagination exceeded {_MAX_PAGES} requests")
 
     def create_confluence_page(
         self,

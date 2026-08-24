@@ -69,8 +69,7 @@ def collect_documents() -> list[Document]:
     space_key = os.environ.get("CONFLUENCE_SPACE_KEY")
     if space_key:
         space_id = client.get_space_id(space_key)
-        pages, _ = client.fetch_confluence_pages(space_id)
-        for page in pages:
+        for page in client.iter_confluence_pages(space_id):
             labels = client.fetch_confluence_labels(page["id"])
             if INSURANCE_KB_LABEL not in labels:
                 continue
@@ -78,8 +77,7 @@ def collect_documents() -> list[Document]:
 
     jira_project_key = os.environ.get("JIRA_PROJECT_KEY")
     if jira_project_key:
-        issues, _ = client.fetch_jira_issues(f"project={jira_project_key}")
-        for issue in issues:
+        for issue in client.iter_jira_issues(f"project={jira_project_key}"):
             documents.append(jira_issue_to_document(issue, base_url))
 
     return documents
