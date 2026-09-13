@@ -29,7 +29,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest"]
+dev = ["pytest",
+       "ruff",
+]
 
 [tool.setuptools.packages.find]
 where = ["src/backend"]
@@ -38,21 +40,25 @@ include = ["supportagent*"]
 [tool.setuptools.package-dir]
 "" = "src/backend"
 
+[tool.ruff]
+target-version = "py310"
+src = ["src/backend"]
+
 [tool.vercel]
 entrypoint = "supportagent.api:app"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = [
-  "--strict-config",
-  "--strict-markers",
-  "-ra",
+    "--strict-config",
+    "--strict-markers",
+    "-ra",
 ]
 markers = [
-  "unit: isolated deterministic tests without external infrastructure",
-  "component: in-process tests across multiple application modules",
-  "integration: tests against real infrastructure such as databases or storage",
-  "eval: AI quality evaluations based on datasets and scoring rules",
-  "live: tests that call real external AI providers and may incur cost",
-  "e2e: end-to-end tests against a deployed application",
+    "unit: isolated deterministic tests without external infrastructure",
+    "component: in-process tests across multiple application modules",
+    "integration: tests against real infrastructure such as databases or storage",
+    "eval: AI quality evaluations based on datasets and scoring rules",
+    "live: tests that call real external AI providers and may incur cost",
+    "e2e: end-to-end tests against a deployed application",
 ]
