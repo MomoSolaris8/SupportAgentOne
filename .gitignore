@@ -348,6 +348,10 @@ evals/model_pricing.local.json
 # Local presentation exports
 *.pptx
 
+# Generated document exports and temporary rendering files
+/output/
+/tmp/
+
 # Local coding-agent instructions
 AGENTS.md
 AGENTS.de.md
