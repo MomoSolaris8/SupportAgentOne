@@ -9,7 +9,7 @@ from supportagent.api.router import register_routes
 from supportagent.claims import ensure_claim_schema
 from supportagent.core.logging_config import configure_logging
 from supportagent.mcp_client.store import ensure_mcp_schema
-from supportagent.rag.builtin_seed import ensure_rag_schema, seed_builtin_rag_if_enabled
+from supportagent.rag.vector_store import ensure_rag_schema
 from supportagent.uploads import ensure_upload_schema
 
 load_dotenv()
@@ -21,7 +21,6 @@ async def lifespan(_app: FastAPI):
     ensure_mcp_schema()
     ensure_upload_schema()
     ensure_claim_schema()
-    seed_builtin_rag_if_enabled()
     yield
 
 
