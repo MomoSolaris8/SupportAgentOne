@@ -34,6 +34,15 @@ def create_schema(conn: psycopg.Connection, dimensions: int) -> None:
     conn.commit()
 
 
+def ensure_rag_schema() -> None:
+    dimensions = int(os.environ.get("EMBEDDING_DIMENSIONS", "1024"))
+    conn = get_connection()
+    try:
+        create_schema(conn, dimensions)
+    finally:
+        conn.close()
+
+
 def upsert_chunk(conn: psycopg.Connection, chunk: dict, embedding: list[float]) -> None:
     conn.execute(
         """

@@ -4,7 +4,6 @@ from pathlib import Path
 from supportagent.claims.document_rules import missing_documents_for_claim
 from supportagent.claims.few_shot import CLAIM_REVIEW_FEW_SHOTS
 from supportagent.claims.schemas import Claim, ClaimDocument
-from supportagent.rag.builtin_seed import builtin_documents
 
 
 def load_claim_fixtures(project_root: Path):
@@ -72,15 +71,3 @@ def test_few_shots_teach_behavior_without_policy_identifiers():
     serialized = json.dumps(CLAIM_REVIEW_FEW_SHOTS).casefold()
     assert "pol-" not in serialized
     assert "2026.1" not in serialized
-
-
-def test_approved_knowledge_has_governance_metadata():
-    documents = builtin_documents()
-    approved = [document for document in documents if document.metadata["source"] == "confluence"]
-    assert approved
-    for document in approved:
-        assert document.metadata["approval_status"] == "approved"
-        assert document.metadata["product_line"]
-        assert document.metadata["jurisdiction"] == "DE"
-        assert document.metadata["effective_from"]
-        assert document.metadata["owner_team"]

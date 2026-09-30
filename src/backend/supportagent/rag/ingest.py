@@ -3,11 +3,14 @@ import os
 from dataclasses import asdict
 
 from dotenv import load_dotenv
+
 from supportagent.adf_utils import adf_to_text
 from supportagent.core.models import Document
 from supportagent.html_utils import html_to_text
 from supportagent.integrations.atlassian_client import AtlassianClient
-from supportagent.seed import INSURANCE_KB_LABEL
+
+# Only Confluence pages carrying this label belong to the insurance knowledge base.
+INSURANCE_KB_LABEL = "insurance-kb"
 
 
 def confluence_page_to_document(page: dict, base_url: str, labels: list[str]) -> Document:
