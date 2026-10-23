@@ -1,6 +1,7 @@
 import pytest
+from sqlalchemy import text
 
-from supportagent.rag.vector_store import get_connection
+from supportagent.db.session import SessionLocal
 from supportagent.uploads.store import (
     create_uploaded_file,
     fetch_uploaded_file,
@@ -10,10 +11,10 @@ from supportagent.uploads.store import (
 
 @pytest.fixture
 def conn(clean_db):
-    conn = get_connection()
-    yield conn
-    conn.rollback()
-    conn.close()
+    session = SessionLocal()
+    yield session
+    session.rollback()
+    session.close()
 
 
 def _create(conn, file_id, user_id="user-1", **overrides):
@@ -66,11 +67,13 @@ def test_missing_image_analysis_is_stored_as_empty_object(conn):
 
 def test_legacy_rows_fall_back_to_storage_path(conn):
     conn.execute(
-        """
-        INSERT INTO uploaded_files
-            (id, user_id, filename, content_type, storage_path, image_summary)
-        VALUES ('legacy', 'user-1', 'old.png', 'image/png', '/data/old.png', 'old')
-        """
+        text(
+            """
+            INSERT INTO uploaded_files
+                (id, user_id, filename, content_type, storage_path, image_summary)
+            VALUES ('legacy', 'user-1', 'old.png', 'image/png', '/data/old.png', 'old')
+            """
+        )
     )
 
     record = fetch_uploaded_file(conn, user_id="user-1", image_id="legacy")
@@ -83,7 +86,9 @@ def test_fetch_uploaded_files_filters_by_user_and_orders_by_upload_time(conn):
     _create(conn, "older")
     _create(conn, "foreign", user_id="user-2")
     conn.execute(
-        "UPDATE uploaded_files SET created_at = now() - interval '1 hour' WHERE id = 'older'"
+        text(
+            "UPDATE uploaded_files SET created_at = now() - interval '1 hour' WHERE id = 'older'"
+        )
     )
 
     rows = fetch_uploaded_files(
