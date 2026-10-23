@@ -1,5 +1,7 @@
-import psycopg
-from psycopg.types.json import Json
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from supportagent.db.models import UploadedFile
 
 
 def ensure_upload_schema() -> None:
@@ -25,12 +27,24 @@ def ensure_upload_schema() -> None:
             )
             """
         )
-        conn.execute("ALTER TABLE uploaded_files ADD COLUMN IF NOT EXISTS storage_provider TEXT NOT NULL DEFAULT 'local'")
-        conn.execute("ALTER TABLE uploaded_files ADD COLUMN IF NOT EXISTS storage_bucket TEXT NOT NULL DEFAULT 'local'")
-        conn.execute("ALTER TABLE uploaded_files ADD COLUMN IF NOT EXISTS storage_key TEXT")
-        conn.execute("ALTER TABLE uploaded_files ADD COLUMN IF NOT EXISTS storage_path TEXT")
-        conn.execute("ALTER TABLE uploaded_files ADD COLUMN IF NOT EXISTS image_analysis JSONB NOT NULL DEFAULT '{}'::jsonb")
-        conn.execute("ALTER TABLE uploaded_files ALTER COLUMN storage_path DROP NOT NULL")
+        conn.execute(
+            "ALTER TABLE uploaded_files ADD COLUMN IF NOT EXISTS storage_provider TEXT NOT NULL DEFAULT 'local'"
+        )
+        conn.execute(
+            "ALTER TABLE uploaded_files ADD COLUMN IF NOT EXISTS storage_bucket TEXT NOT NULL DEFAULT 'local'"
+        )
+        conn.execute(
+            "ALTER TABLE uploaded_files ADD COLUMN IF NOT EXISTS storage_key TEXT"
+        )
+        conn.execute(
+            "ALTER TABLE uploaded_files ADD COLUMN IF NOT EXISTS storage_path TEXT"
+        )
+        conn.execute(
+            "ALTER TABLE uploaded_files ADD COLUMN IF NOT EXISTS image_analysis JSONB NOT NULL DEFAULT '{}'::jsonb"
+        )
+        conn.execute(
+            "ALTER TABLE uploaded_files ALTER COLUMN storage_path DROP NOT NULL"
+        )
         conn.execute(
             """
             UPDATE uploaded_files
@@ -51,7 +65,7 @@ def ensure_upload_schema() -> None:
 
 
 def create_uploaded_file(
-    conn: psycopg.Connection,
+    session: Session,
     file_id: str,
     user_id: str,
     thread_id: str | None,
@@ -63,80 +77,65 @@ def create_uploaded_file(
     image_summary: str,
     image_analysis: dict[str, object] | None = None,
 ) -> None:
-    conn.execute(
-        """
-        INSERT INTO uploaded_files (
-            id, user_id, thread_id, filename, content_type,
-            storage_provider, storage_bucket, storage_key, image_summary, image_analysis
+    session.add(
+        UploadedFile(
+            id=file_id,
+            user_id=user_id,
+            thread_id=thread_id,
+            filename=filename,
+            content_type=content_type,
+            storage_provider=storage_provider,
+            storage_bucket=storage_bucket,
+            storage_key=storage_key,
+            image_summary=image_summary,
+            image_analysis=image_analysis or {},
         )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """,
-        (
-            file_id,
-            user_id,
-            thread_id,
-            filename,
-            content_type,
-            storage_provider,
-            storage_bucket,
-            storage_key,
-            image_summary,
-            Json(image_analysis or {}),
-        ),
     )
 
 
 def fetch_uploaded_files(
-    conn: psycopg.Connection,
+    session: Session,
     user_id: str,
     image_ids: list[str],
 ) -> list[dict[str, str]]:
-    rows = conn.execute(
-        """
-        SELECT id, filename, content_type, image_summary, image_analysis
-        FROM uploaded_files
-        WHERE user_id = %s
-          AND id = ANY(%s)
-        ORDER BY created_at ASC
-        """,
-        (user_id, image_ids),
-    ).fetchall()
+    files = session.scalars(
+        select(UploadedFile)
+        .where(UploadedFile.user_id == user_id, UploadedFile.id.in_(image_ids))
+        .order_by(UploadedFile.created_at)
+    )
     return [
         {
-            "id": row[0],
-            "filename": row[1],
-            "content_type": row[2],
-            "image_summary": row[3],
-            "image_analysis": row[4] or {},
+            "id": file.id,
+            "filename": file.filename,
+            "content_type": file.content_type,
+            "image_summary": file.image_summary,
+            "image_analysis": file.image_analysis or {},
         }
-        for row in rows
+        for file in files
     ]
 
 
 def fetch_uploaded_file(
-    conn: psycopg.Connection,
+    session: Session,
     user_id: str,
     image_id: str,
 ) -> dict[str, str] | None:
-    row = conn.execute(
-        """
-        SELECT id, filename, content_type, storage_provider, storage_bucket,
-               COALESCE(storage_key, storage_path), image_summary, image_analysis
-        FROM uploaded_files
-        WHERE user_id = %s
-          AND id = %s
-        """,
-        (user_id, image_id),
-    ).fetchone()
-    if row is None:
+    file = session.scalar(
+        select(UploadedFile).where(
+            UploadedFile.user_id == user_id, UploadedFile.id == image_id
+        )
+    )
+    if file is None:
         return None
     return {
-        "id": row[0],
-        "filename": row[1],
-        "content_type": row[2],
-        "storage_provider": row[3],
-        "storage_bucket": row[4],
-        "storage_key": row[5],
-        "image_summary": row[6],
-        "image_analysis": row[7] or {},
+        "id": file.id,
+        "filename": file.filename,
+        "content_type": file.content_type,
+        "storage_provider": file.storage_provider,
+        "storage_bucket": file.storage_bucket,
+        "storage_key": file.storage_key
+        if file.storage_key is not None
+        else file.storage_path,
+        "image_summary": file.image_summary,
+        "image_analysis": file.image_analysis or {},
     }

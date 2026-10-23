@@ -4,7 +4,7 @@ from pydantic import BaseModel
 
 from supportagent.auth.dependencies import get_current_user
 from supportagent.auth.schemas import AuthUser
-from supportagent.rag.vector_store import get_connection
+from supportagent.db.session import SessionLocal
 from supportagent.storage import get_storage
 from supportagent.uploads import save_uploaded_image
 from supportagent.uploads.store import fetch_uploaded_file
@@ -28,7 +28,9 @@ async def upload_image(
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     except Exception as error:
-        raise HTTPException(status_code=500, detail=f"Image upload failed: {error}") from error
+        raise HTTPException(
+            status_code=500, detail=f"Image upload failed: {error}"
+        ) from error
     return UploadedImageResponse(
         id=uploaded.id,
         filename=uploaded.filename,
@@ -42,11 +44,9 @@ def preview_image(
     image_id: str,
     user: AuthUser = Depends(get_current_user),
 ) -> Response:
-    conn = get_connection()
-    try:
-        record = fetch_uploaded_file(conn, user_id=user.id, image_id=image_id)
-    finally:
-        conn.close()
+    with SessionLocal() as session:
+        record = fetch_uploaded_file(session, user_id=user.id, image_id=image_id)
+
     if record is None:
         raise HTTPException(status_code=404, detail="Image not found.")
     try:
@@ -55,7 +55,9 @@ def preview_image(
             key=record["storage_key"],
         )
     except Exception as error:
-        raise HTTPException(status_code=404, detail="Image content not found.") from error
+        raise HTTPException(
+            status_code=404, detail="Image content not found."
+        ) from error
     return Response(
         content=content,
         media_type=record["content_type"],
