@@ -16,9 +16,11 @@ from supportagent.db.models.mcp import (
     McpUserCredential,
 )
 from supportagent.db.models.memory import Conversation, ConversationMessage, LongMemory
+from supportagent.db.models.rag import Chunk
 from supportagent.db.models.uploads import UploadedFile
 
 __all__ = [
+    "Chunk",
     "Claim",
     "ClaimActionApproval",
     "ClaimAuditEvent",
