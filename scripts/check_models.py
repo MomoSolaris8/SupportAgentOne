@@ -15,7 +15,12 @@ def include_object(obj, name, type_, reflected, compare_to):
 
 with engine.connect() as conn:
     ctx = MigrationContext.configure(
-        conn, opts={"compare_type": True, "include_object": include_object}
+        conn,
+        opts={
+            "compare_type": True,
+            "compare_server_default": True,
+            "include_object": include_object,
+        },
     )
     diffs = compare_metadata(ctx, Base.metadata)
 
