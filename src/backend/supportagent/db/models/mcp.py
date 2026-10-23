@@ -81,8 +81,8 @@ class McpUserCredential(Base):
     updated_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), server_default=func.now()
     )
-    
-    
+
+
 class McpOAuthState(Base):
     __tablename__ = "mcp_oauth_states"
 
