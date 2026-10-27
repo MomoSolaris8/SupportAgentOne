@@ -87,21 +87,11 @@ def start_postgres() -> None:
         ) from exc
 
 
-def wait_for_memory_schema() -> None:
-    print("Checking Postgres and creating memory schema if needed...")
-    code = (
-        "from dotenv import load_dotenv; "
-        "load_dotenv(); "
-        "from supportagent.rag.vector_store import get_connection; "
-        "from supportagent.memory import create_memory_schema; "
-        "conn=get_connection(); "
-        "create_memory_schema(conn); "
-        "conn.close(); "
-        "print('memory schema ok')"
-    )
+def wait_for_database() -> None:
+    print("Waiting for Postgres and applying database migrations...")
     for attempt in range(1, 16):
         result = subprocess.run(
-            [python_command(), "-c", code],
+            [python_command(), "-m", "alembic", "upgrade", "head"],
             cwd=PROJECT_ROOT,
             env=project_env(),
             check=False,
@@ -110,7 +100,7 @@ def wait_for_memory_schema() -> None:
             return
         print(f"Postgres is not ready yet ({attempt}/15). Waiting...")
         time.sleep(2)
-    raise SystemExit("Postgres did not become ready. Check docker compose logs postgres.")
+    raise SystemExit("Could not migrate the database. Check docker compose logs postgres.")
 
 
 def start_backend() -> subprocess.Popen:
@@ -192,7 +182,7 @@ def main() -> None:
     ensure_ports_available()
     ensure_frontend_dependencies()
     start_postgres()
-    wait_for_memory_schema()
+    wait_for_database()
     start_backend()
     start_frontend()
     monitor()

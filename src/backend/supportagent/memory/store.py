@@ -1,313 +1,217 @@
-import json
-import os
+from sqlalchemy import delete, func, select, update
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.orm import Session
 
-import psycopg
-
+from supportagent.db.models import Conversation, ConversationMessage
+from supportagent.db.models import LongMemory as LongMemoryRow
 from supportagent.memory.schemas import ChatMessage, ConversationThread, LongMemory
 
 SHORT_MEMORY_LIMIT = 6
 LONG_MEMORY_LIMIT = 3
 
 
-def create_memory_schema(conn: psycopg.Connection, dimensions: int | None = None) -> None:
-    dimensions = dimensions or int(os.environ.get("EMBEDDING_DIMENSIONS", "1024"))
-    conn.execute("CREATE EXTENSION IF NOT EXISTS vector")
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS conversations (
-            thread_id TEXT PRIMARY KEY,
-            user_id TEXT NOT NULL,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-        )
-        """
+def _to_chat_message(message: ConversationMessage) -> ChatMessage:
+    return ChatMessage(
+        id=message.id,
+        role=message.role,
+        content=message.content,
+        created_at=message.created_at,
     )
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS conversation_messages (
-            id BIGSERIAL PRIMARY KEY,
-            thread_id TEXT NOT NULL REFERENCES conversations(thread_id) ON DELETE CASCADE,
-            role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
-            content TEXT NOT NULL,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-        )
-        """
-    )
-    conn.execute(
-        f"""
-        CREATE TABLE IF NOT EXISTS long_memories (
-            id BIGSERIAL PRIMARY KEY,
-            user_id TEXT NOT NULL,
-            thread_id TEXT REFERENCES conversations(thread_id) ON DELETE SET NULL,
-            kind TEXT NOT NULL DEFAULT 'conversation_summary',
-            content TEXT NOT NULL,
-            embedding vector({dimensions}),
-            metadata JSONB NOT NULL DEFAULT '{{}}'::jsonb,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-        )
-        """
-    )
-    conn.execute(
-        """
-        CREATE INDEX IF NOT EXISTS conversation_messages_thread_created_idx
-        ON conversation_messages (thread_id, created_at DESC)
-        """
-    )
-    conn.execute(
-        """
-        CREATE INDEX IF NOT EXISTS long_memories_user_created_idx
-        ON long_memories (user_id, created_at DESC)
-        """
-    )
-    conn.commit()
 
 
-def ensure_conversation(conn: psycopg.Connection, thread_id: str, user_id: str) -> None:
-    conn.execute(
-        """
-        INSERT INTO conversations (thread_id, user_id)
-        VALUES (%s, %s)
-        ON CONFLICT (thread_id)
-        DO UPDATE SET user_id = EXCLUDED.user_id, updated_at = now()
-        """,
-        (thread_id, user_id),
+def ensure_conversation(session: Session, thread_id: str, user_id: str) -> None:
+    stmt = insert(Conversation).values(thread_id=thread_id, user_id=user_id)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[Conversation.thread_id],
+        set_={"user_id": stmt.excluded.user_id, "updated_at": func.now()},
     )
+    session.execute(stmt)
 
 
 def get_short_memory(
-    conn: psycopg.Connection,
+    session: Session,
     thread_id: str,
     limit: int = SHORT_MEMORY_LIMIT,
 ) -> list[ChatMessage]:
-    rows = conn.execute(
-        """
-        SELECT id, role, content, created_at
-        FROM conversation_messages
-        WHERE thread_id = %s
-        ORDER BY created_at DESC, id DESC
-        LIMIT %s
-        """,
-        (thread_id, limit),
-    ).fetchall()
-    return [
-        ChatMessage(id=row[0], role=row[1], content=row[2], created_at=row[3])
-        for row in reversed(rows)
-    ]
+    messages = session.scalars(
+        select(ConversationMessage)
+        .where(ConversationMessage.thread_id == thread_id)
+        .order_by(ConversationMessage.created_at.desc(), ConversationMessage.id.desc())
+        .limit(limit)
+    ).all()
+    return [_to_chat_message(message) for message in reversed(messages)]
 
 
 def get_thread_messages(
-    conn: psycopg.Connection,
+    session: Session,
     thread_id: str,
     user_id: str,
     limit: int = 100,
 ) -> list[ChatMessage]:
-    rows = conn.execute(
-        """
-        SELECT conversation_messages.id,
-               conversation_messages.role,
-               conversation_messages.content,
-               conversation_messages.created_at
-        FROM conversation_messages
-        JOIN conversations
-          ON conversations.thread_id = conversation_messages.thread_id
-        WHERE conversation_messages.thread_id = %s
-          AND conversations.user_id = %s
-        ORDER BY conversation_messages.created_at ASC,
-                 conversation_messages.id ASC
-        LIMIT %s
-        """,
-        (thread_id, user_id, limit),
-    ).fetchall()
-    return [
-        ChatMessage(id=row[0], role=row[1], content=row[2], created_at=row[3])
-        for row in rows
-    ]
+    messages = session.scalars(
+        select(ConversationMessage)
+        .join(Conversation, Conversation.thread_id == ConversationMessage.thread_id)
+        .where(
+            ConversationMessage.thread_id == thread_id,
+            Conversation.user_id == user_id,
+        )
+        .order_by(ConversationMessage.created_at, ConversationMessage.id)
+        .limit(limit)
+    )
+    return [_to_chat_message(message) for message in messages]
 
 
 def list_conversation_threads(
-    conn: psycopg.Connection,
+    session: Session,
     user_id: str,
     limit: int = 30,
 ) -> list[ConversationThread]:
-    rows = conn.execute(
-        """
-        SELECT conversations.thread_id,
-               COALESCE(
-                   NULLIF(
-                       left(
-                           min(conversation_messages.content)
-                           FILTER (WHERE conversation_messages.role = 'user'),
-                           80
-                       ),
-                       ''
-                   ),
-                   'New chat'
-               ) AS title,
-               conversations.updated_at,
-               count(conversation_messages.id) AS message_count
-        FROM conversations
-        LEFT JOIN conversation_messages
-          ON conversation_messages.thread_id = conversations.thread_id
-        WHERE conversations.user_id = %s
-        GROUP BY conversations.thread_id, conversations.updated_at
-        ORDER BY conversations.updated_at DESC
-        LIMIT %s
-        """,
-        (user_id, limit),
-    ).fetchall()
+    first_question = func.min(ConversationMessage.content).filter(
+        ConversationMessage.role == "user"
+    )
+    title = func.coalesce(func.nullif(func.left(first_question, 80), ""), "New chat")
+    rows = session.execute(
+        select(
+            Conversation.thread_id,
+            title.label("title"),
+            Conversation.updated_at,
+            func.count(ConversationMessage.id).label("message_count"),
+        )
+        .outerjoin(
+            ConversationMessage,
+            ConversationMessage.thread_id == Conversation.thread_id,
+        )
+        .where(Conversation.user_id == user_id)
+        .group_by(Conversation.thread_id, Conversation.updated_at)
+        .order_by(Conversation.updated_at.desc())
+        .limit(limit)
+    )
     return [
         ConversationThread(
-            thread_id=row[0],
-            title=row[1],
-            updated_at=row[2],
-            message_count=row[3],
+            thread_id=row.thread_id,
+            title=row.title,
+            updated_at=row.updated_at,
+            message_count=row.message_count,
         )
         for row in rows
     ]
 
 
-def add_message(conn: psycopg.Connection, thread_id: str, role: str, content: str) -> None:
-    conn.execute(
-        """
-        INSERT INTO conversation_messages (thread_id, role, content)
-        VALUES (%s, %s, %s)
-        """,
-        (thread_id, role, content),
+def add_message(session: Session, thread_id: str, role: str, content: str) -> None:
+    session.add(ConversationMessage(thread_id=thread_id, role=role, content=content))
+
+
+def _owned_question(
+    session: Session,
+    thread_id: str,
+    user_id: str,
+    message_id: int,
+) -> ConversationMessage | None:
+    return session.scalar(
+        select(ConversationMessage)
+        .join(Conversation, Conversation.thread_id == ConversationMessage.thread_id)
+        .where(
+            ConversationMessage.id == message_id,
+            ConversationMessage.thread_id == thread_id,
+            ConversationMessage.role == "user",
+            Conversation.user_id == user_id,
+        )
+    )
+
+
+def _delete_answer_after(session: Session, question: ConversationMessage) -> None:
+    answer_id = session.scalar(
+        select(ConversationMessage.id)
+        .where(
+            ConversationMessage.thread_id == question.thread_id,
+            ConversationMessage.role == "assistant",
+            ConversationMessage.id > question.id,
+        )
+        .order_by(ConversationMessage.id)
+        .limit(1)
+    )
+    if answer_id is not None:
+        session.execute(delete(ConversationMessage).where(ConversationMessage.id == answer_id))
+
+
+def _touch_conversation(session: Session, thread_id: str) -> None:
+    session.execute(
+        update(Conversation)
+        .where(Conversation.thread_id == thread_id)
+        .values(updated_at=func.now())
     )
 
 
 def update_user_message(
-    conn: psycopg.Connection,
+    session: Session,
     thread_id: str,
     user_id: str,
     message_id: int,
     content: str,
 ) -> bool:
-    result = conn.execute(
-        """
-        UPDATE conversation_messages
-        SET content = %s
-        FROM conversations
-        WHERE conversation_messages.id = %s
-          AND conversation_messages.thread_id = %s
-          AND conversation_messages.role = 'user'
-          AND conversations.thread_id = conversation_messages.thread_id
-          AND conversations.user_id = %s
-        """,
-        (content, message_id, thread_id, user_id),
-    )
-    if result.rowcount:
-        delete_following_assistant_message(conn, thread_id, user_id, message_id)
-        conn.execute("UPDATE conversations SET updated_at = now() WHERE thread_id = %s", (thread_id,))
-    return bool(result.rowcount)
-
-
-def delete_following_assistant_message(
-    conn: psycopg.Connection,
-    thread_id: str,
-    user_id: str,
-    message_id: int,
-) -> None:
-    conn.execute(
-        """
-        DELETE FROM conversation_messages
-        WHERE id = (
-            SELECT assistant.id
-            FROM conversation_messages AS user_message
-            JOIN conversations
-              ON conversations.thread_id = user_message.thread_id
-            JOIN LATERAL (
-                SELECT id
-                FROM conversation_messages
-                WHERE thread_id = user_message.thread_id
-                  AND role = 'assistant'
-                  AND id > user_message.id
-                ORDER BY id ASC
-                LIMIT 1
-            ) AS assistant ON true
-            WHERE user_message.id = %s
-              AND user_message.thread_id = %s
-              AND user_message.role = 'user'
-              AND conversations.user_id = %s
-        )
-        """,
-        (message_id, thread_id, user_id),
-    )
+    question = _owned_question(session, thread_id, user_id, message_id)
+    if question is None:
+        return False
+    question.content = content
+    _delete_answer_after(session, question)
+    _touch_conversation(session, thread_id)
+    return True
 
 
 def delete_user_turn(
-    conn: psycopg.Connection,
+    session: Session,
     thread_id: str,
     user_id: str,
     message_id: int,
 ) -> bool:
-    delete_following_assistant_message(conn, thread_id, user_id, message_id)
-    result = conn.execute(
-        """
-        DELETE FROM conversation_messages
-        USING conversations
-        WHERE conversation_messages.id = %s
-          AND conversation_messages.thread_id = %s
-          AND conversation_messages.role = 'user'
-          AND conversations.thread_id = conversation_messages.thread_id
-          AND conversations.user_id = %s
-        """,
-        (message_id, thread_id, user_id),
-    )
-    if result.rowcount:
-        conn.execute("UPDATE conversations SET updated_at = now() WHERE thread_id = %s", (thread_id,))
-    return bool(result.rowcount)
-    conn.execute(
-        """
-        UPDATE conversations
-        SET updated_at = now()
-        WHERE thread_id = %s
-        """,
-        (thread_id,),
-    )
+    question = _owned_question(session, thread_id, user_id, message_id)
+    if question is None:
+        return False
+    _delete_answer_after(session, question)
+    session.delete(question)
+    _touch_conversation(session, thread_id)
+    return True
 
 
 def search_long_memories(
-    conn: psycopg.Connection,
+    session: Session,
     user_id: str,
     query_embedding: list[float],
     limit: int = LONG_MEMORY_LIMIT,
 ) -> list[LongMemory]:
-    rows = conn.execute(
-        """
-        SELECT id, content, kind, embedding <=> %s::vector AS distance
-        FROM long_memories
-        WHERE user_id = %s
-        ORDER BY distance
-        LIMIT %s
-        """,
-        (query_embedding, user_id, limit),
-    ).fetchall()
+    distance = LongMemoryRow.embedding.cosine_distance(query_embedding)
+    rows = session.execute(
+        select(
+            LongMemoryRow.id,
+            LongMemoryRow.content,
+            LongMemoryRow.kind,
+            distance.label("distance"),
+        )
+        .where(LongMemoryRow.user_id == user_id)
+        .order_by(distance)
+        .limit(limit)
+    )
     return [
-        LongMemory(id=row[0], content=row[1], kind=row[2], distance=row[3])
+        LongMemory(id=row.id, content=row.content, kind=row.kind, distance=row.distance)
         for row in rows
     ]
 
 
 def add_long_memory(
-    conn: psycopg.Connection,
+    session: Session,
     user_id: str,
     thread_id: str,
     content: str,
     embedding: list[float],
     kind: str = "conversation_summary",
 ) -> None:
-    conn.execute(
-        """
-        INSERT INTO long_memories (user_id, thread_id, kind, content, embedding, metadata)
-        VALUES (%s, %s, %s, %s, %s, %s)
-        """,
-        (
-            user_id,
-            thread_id,
-            kind,
-            content,
-            embedding,
-            json.dumps({"source": "supportagent", "created_by": "answer_with_agent"}),
-        ),
+    session.add(
+        LongMemoryRow(
+            user_id=user_id,
+            thread_id=thread_id,
+            kind=kind,
+            content=content,
+            embedding=embedding,
+            metadata_={"source": "supportagent", "created_by": "answer_with_agent"},
+        )
     )
