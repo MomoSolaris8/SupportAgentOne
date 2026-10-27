@@ -8,7 +8,6 @@ from supportagent.api.middleware import register_request_logging
 from supportagent.api.router import register_routes
 from supportagent.claims import ensure_claim_schema
 from supportagent.core.logging_config import configure_logging
-from supportagent.mcp_client.store import ensure_mcp_schema
 from supportagent.rag.vector_store import ensure_rag_schema
 from supportagent.uploads import ensure_upload_schema
 
@@ -18,7 +17,6 @@ configure_logging()
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     ensure_rag_schema()
-    ensure_mcp_schema()
     ensure_upload_schema()
     ensure_claim_schema()
     yield

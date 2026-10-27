@@ -1,12 +1,20 @@
-import json
-from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
-import psycopg
 import requests
+from sqlalchemy import and_, delete, func, select, update
+from sqlalchemy.dialects.postgresql import insert
 
-from supportagent.rag.vector_store import get_connection
+from supportagent.db.models import (
+    McpIdempotencyRecord,
+    McpOAuthState,
+    McpServer,
+    McpToolAuditLog,
+    McpUserCredential,
+)
+from supportagent.db.models import McpToolPolicy as ToolPolicyRow
+from supportagent.db.session import SessionLocal
 
 
 @dataclass(frozen=True)
@@ -37,45 +45,6 @@ class MCPIdempotencyClaim:
     result: str | None = None
 
 
-DEFAULT_SERVER_ROWS = [
-    (
-        "time_mcp",
-        "Local timezone-aware time MCP server",
-        "stdio",
-        json.dumps(
-            {
-                "command": "python",
-                "args": ["-m", "supportagent.mcp_servers.time_mcp", "--transport", "stdio"],
-            }
-        ),
-        True,
-    ),
-    (
-        "weather_mcp",
-        "Local Google Weather MCP server",
-        "stdio",
-        json.dumps(
-            {
-                "command": "python",
-                "args": ["-m", "supportagent.mcp_servers.weather_mcp", "--transport", "stdio"],
-            }
-        ),
-        True,
-    ),
-    (
-        "teams_mcp",
-        "Local Microsoft Graph MCP server",
-        "stdio",
-        json.dumps(
-            {
-                "command": "python",
-                "args": ["-m", "supportagent.mcp_servers.teams_mcp", "--transport", "stdio"],
-            }
-        ),
-        True,
-    ),
-]
-
 READ_ONLY_TOOL_NAMES = {
     "get_my_profile",
     "batch_get_user_info",
@@ -89,185 +58,21 @@ READ_ONLY_TOOL_NAMES = {
     "get_current_time",
 }
 
-PERSONAL_ACCOUNT_DISABLED_TOOL_NAMES = {
-    "batch_get_user_info",
-    "list_chats",
-    "create_message",
-}
-
-DEFAULT_TOOL_POLICIES = [
-    ("time_mcp", "get_current_time"),
-    ("weather_mcp", "get_weather"),
-    ("teams_mcp", "get_my_profile"),
-    ("teams_mcp", "batch_get_user_info"),
-    ("teams_mcp", "create_calendar"),
-    ("teams_mcp", "delete_calendar"),
-    ("teams_mcp", "get_calendar_info"),
-    ("teams_mcp", "get_calendars_list"),
-    ("teams_mcp", "update_calendar"),
-    ("teams_mcp", "create_calendar_event"),
-    ("teams_mcp", "create_default_calendar_event"),
-    ("teams_mcp", "append_calendar_event_attendee"),
-    ("teams_mcp", "get_calendar_event"),
-    ("teams_mcp", "update_calendar_event"),
-    ("teams_mcp", "delete_calendar_event"),
-    ("teams_mcp", "create_document"),
-    ("teams_mcp", "get_document"),
-    ("teams_mcp", "create_folder"),
-    ("teams_mcp", "list_folder_files"),
-    ("teams_mcp", "list_chats"),
-    ("teams_mcp", "create_message"),
-]
-
-
-def create_mcp_schema(conn: psycopg.Connection) -> None:
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS mcp_servers (
-            server_name TEXT PRIMARY KEY,
-            display_name TEXT NOT NULL,
-            transport TEXT NOT NULL CHECK (transport IN ('stdio', 'sse', 'streamable_http')),
-            config JSONB NOT NULL DEFAULT '{}'::jsonb,
-            enabled BOOLEAN NOT NULL DEFAULT true,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-        )
-        """
-    )
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS mcp_tool_policies (
-            server_name TEXT NOT NULL REFERENCES mcp_servers(server_name) ON DELETE CASCADE,
-            tool_name TEXT NOT NULL,
-            enabled BOOLEAN NOT NULL DEFAULT true,
-            auto_allowed BOOLEAN NOT NULL DEFAULT false,
-            requires_confirmation BOOLEAN NOT NULL DEFAULT true,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-            PRIMARY KEY (server_name, tool_name)
-        )
-        """
-    )
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS mcp_user_credentials (
-            user_id TEXT NOT NULL,
-            server_name TEXT NOT NULL REFERENCES mcp_servers(server_name) ON DELETE CASCADE,
-            credentials JSONB NOT NULL DEFAULT '{}'::jsonb,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-            PRIMARY KEY (user_id, server_name)
-        )
-        """
-    )
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS mcp_oauth_states (
-            state TEXT PRIMARY KEY,
-            user_id TEXT NOT NULL,
-            provider TEXT NOT NULL,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-            expires_at TIMESTAMPTZ NOT NULL
-        )
-        """
-    )
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS mcp_tool_audit_logs (
-            id BIGSERIAL PRIMARY KEY,
-            user_id TEXT NOT NULL,
-            server_name TEXT NOT NULL,
-            tool_name TEXT NOT NULL,
-            status TEXT NOT NULL CHECK (status IN ('success', 'error', 'blocked')),
-            arguments JSONB NOT NULL DEFAULT '{}'::jsonb,
-            result_preview TEXT,
-            error TEXT,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-        )
-        """
-    )
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS mcp_idempotency_records (
-            user_id TEXT NOT NULL,
-            server_name TEXT NOT NULL,
-            tool_name TEXT NOT NULL,
-            idempotency_key TEXT NOT NULL,
-            status TEXT NOT NULL CHECK (status IN ('in_progress', 'succeeded')),
-            result TEXT,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-            PRIMARY KEY (user_id, server_name, tool_name, idempotency_key)
-        )
-        """
-    )
-    conn.execute(
-        """
-        CREATE INDEX IF NOT EXISTS mcp_tool_audit_user_created_idx
-        ON mcp_tool_audit_logs (user_id, created_at DESC)
-        """
-    )
-    for server_name, display_name, transport, config, enabled in DEFAULT_SERVER_ROWS:
-        conn.execute(
-            """
-            INSERT INTO mcp_servers (server_name, display_name, transport, config, enabled)
-            VALUES (%s, %s, %s, %s, %s)
-            ON CONFLICT (server_name) DO NOTHING
-            """,
-            (server_name, display_name, transport, config, enabled),
-        )
-    for server_name, tool_name in DEFAULT_TOOL_POLICIES:
-        is_read_only = tool_name in READ_ONLY_TOOL_NAMES
-        is_enabled = tool_name not in PERSONAL_ACCOUNT_DISABLED_TOOL_NAMES
-        conn.execute(
-            """
-            INSERT INTO mcp_tool_policies
-                (server_name, tool_name, enabled, auto_allowed, requires_confirmation)
-            VALUES (%s, %s, %s, %s, %s)
-            ON CONFLICT (server_name, tool_name)
-            DO UPDATE SET
-                enabled = EXCLUDED.enabled,
-                auto_allowed = EXCLUDED.auto_allowed,
-                requires_confirmation = EXCLUDED.requires_confirmation,
-                updated_at = now()
-            """,
-            (server_name, tool_name, is_enabled, is_enabled and is_read_only, is_enabled and not is_read_only),
-        )
-    conn.commit()
-
-
-def ensure_mcp_schema() -> None:
-    conn = get_connection()
-    try:
-        create_mcp_schema(conn)
-    finally:
-        conn.close()
-
 
 def list_mcp_servers() -> list[dict[str, Any]]:
-    ensure_mcp_schema()
-    conn = get_connection()
-    try:
-        rows = conn.execute(
-            """
-            SELECT server_name, display_name, transport, config, enabled, updated_at
-            FROM mcp_servers
-            ORDER BY server_name
-            """
-        ).fetchall()
+    with SessionLocal() as session:
+        servers = session.scalars(select(McpServer).order_by(McpServer.server_name))
         return [
             {
-                "server_name": row[0],
-                "display_name": row[1],
-                "transport": row[2],
-                "config": row[3],
-                "enabled": row[4],
-                "updated_at": row[5].isoformat(),
+                "server_name": server.server_name,
+                "display_name": server.display_name,
+                "transport": server.transport,
+                "config": server.config,
+                "enabled": server.enabled,
+                "updated_at": server.updated_at.isoformat(),
             }
-            for row in rows
+            for server in servers
         ]
-    finally:
-        conn.close()
 
 
 def upsert_mcp_server(
@@ -278,68 +83,60 @@ def upsert_mcp_server(
     config: dict[str, Any],
     enabled: bool,
 ) -> None:
-    ensure_mcp_schema()
-    conn = get_connection()
-    try:
-        conn.execute(
-            """
-            INSERT INTO mcp_servers (server_name, display_name, transport, config, enabled)
-            VALUES (%s, %s, %s, %s, %s)
-            ON CONFLICT (server_name)
-            DO UPDATE SET
-                display_name = EXCLUDED.display_name,
-                transport = EXCLUDED.transport,
-                config = EXCLUDED.config,
-                enabled = EXCLUDED.enabled,
-                updated_at = now()
-            """,
-            (server_name, display_name, transport, json.dumps(config), enabled),
-        )
-        conn.commit()
-    finally:
-        conn.close()
+    stmt = insert(McpServer).values(
+        server_name=server_name,
+        display_name=display_name,
+        transport=transport,
+        config=config,
+        enabled=enabled,
+    )
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[McpServer.server_name],
+        set_={
+            "display_name": stmt.excluded.display_name,
+            "transport": stmt.excluded.transport,
+            "config": stmt.excluded.config,
+            "enabled": stmt.excluded.enabled,
+            "updated_at": func.now(),
+        },
+    )
+    with SessionLocal.begin() as session:
+        session.execute(stmt)
 
 
 def list_tool_policies() -> list[MCPToolPolicy]:
-    ensure_mcp_schema()
-    conn = get_connection()
-    try:
-        rows = conn.execute(
-            """
-            SELECT server_name, tool_name, enabled, auto_allowed, requires_confirmation
-            FROM mcp_tool_policies
-            ORDER BY server_name, tool_name
-            """
-        ).fetchall()
+    with SessionLocal() as session:
+        rows = session.execute(
+            select(
+                ToolPolicyRow.server_name,
+                ToolPolicyRow.tool_name,
+                ToolPolicyRow.enabled,
+                ToolPolicyRow.auto_allowed,
+                ToolPolicyRow.requires_confirmation,
+            ).order_by(ToolPolicyRow.server_name, ToolPolicyRow.tool_name)
+        )
         return [MCPToolPolicy(*row) for row in rows]
-    finally:
-        conn.close()
 
 
 def get_tool_policy(server_name: str, tool_name: str) -> MCPToolPolicy:
-    ensure_mcp_schema()
-    conn = get_connection()
-    try:
-        row = conn.execute(
-            """
-            SELECT server_name, tool_name, enabled, auto_allowed, requires_confirmation
-            FROM mcp_tool_policies
-            WHERE server_name = %s AND tool_name = %s
-            """,
-            (server_name, tool_name),
-        ).fetchone()
-        if row:
-            return MCPToolPolicy(*row)
-        is_read_only = tool_name in READ_ONLY_TOOL_NAMES
+    with SessionLocal() as session:
+        row = session.get(ToolPolicyRow, (server_name, tool_name))
+    if row:
         return MCPToolPolicy(
-            server_name=server_name,
-            tool_name=tool_name,
-            enabled=True,
-            auto_allowed=is_read_only,
-            requires_confirmation=not is_read_only,
+            server_name=row.server_name,
+            tool_name=row.tool_name,
+            enabled=row.enabled,
+            auto_allowed=row.auto_allowed,
+            requires_confirmation=row.requires_confirmation,
         )
-    finally:
-        conn.close()
+    is_read_only = tool_name in READ_ONLY_TOOL_NAMES
+    return MCPToolPolicy(
+        server_name=server_name,
+        tool_name=tool_name,
+        enabled=True,
+        auto_allowed=is_read_only,
+        requires_confirmation=not is_read_only,
+    )
 
 
 def tool_auto_allowed(server_name: str, tool_name: str) -> bool:
@@ -356,6 +153,17 @@ def tool_manual_allowed(server_name: str, tool_name: str, confirmed: bool) -> tu
     return True, None
 
 
+def _idempotency_key_matches(
+    user_id: str, server_name: str, tool_name: str, idempotency_key: str
+):
+    return and_(
+        McpIdempotencyRecord.user_id == user_id,
+        McpIdempotencyRecord.server_name == server_name,
+        McpIdempotencyRecord.tool_name == tool_name,
+        McpIdempotencyRecord.idempotency_key == idempotency_key,
+    )
+
+
 def claim_idempotency_key(
     *,
     user_id: str,
@@ -364,38 +172,30 @@ def claim_idempotency_key(
     idempotency_key: str,
 ) -> MCPIdempotencyClaim:
     """Atomically reserve a write action or replay its earlier successful result."""
-    ensure_mcp_schema()
-    conn = get_connection()
-    try:
-        inserted = conn.execute(
-            """
-            INSERT INTO mcp_idempotency_records
-                (user_id, server_name, tool_name, idempotency_key, status)
-            VALUES (%s, %s, %s, %s, 'in_progress')
-            ON CONFLICT DO NOTHING
-            RETURNING status
-            """,
-            (user_id, server_name, tool_name, idempotency_key),
-        ).fetchone()
+    with SessionLocal.begin() as session:
+        inserted = session.scalar(
+            insert(McpIdempotencyRecord)
+            .values(
+                user_id=user_id,
+                server_name=server_name,
+                tool_name=tool_name,
+                idempotency_key=idempotency_key,
+                status="in_progress",
+            )
+            .on_conflict_do_nothing()
+            .returning(McpIdempotencyRecord.status)
+        )
         if inserted:
-            conn.commit()
             return MCPIdempotencyClaim(status="execute")
 
-        row = conn.execute(
-            """
-            SELECT status, result
-            FROM mcp_idempotency_records
-            WHERE user_id = %s AND server_name = %s AND tool_name = %s
-              AND idempotency_key = %s
-            """,
-            (user_id, server_name, tool_name, idempotency_key),
-        ).fetchone()
-        conn.commit()
-        if row and row[0] == "succeeded":
-            return MCPIdempotencyClaim(status="replay", result=row[1])
-        return MCPIdempotencyClaim(status="in_progress")
-    finally:
-        conn.close()
+        row = session.execute(
+            select(McpIdempotencyRecord.status, McpIdempotencyRecord.result).where(
+                _idempotency_key_matches(user_id, server_name, tool_name, idempotency_key)
+            )
+        ).first()
+    if row and row.status == "succeeded":
+        return MCPIdempotencyClaim(status="replay", result=row.result)
+    return MCPIdempotencyClaim(status="in_progress")
 
 
 def complete_idempotency_key(
@@ -406,21 +206,12 @@ def complete_idempotency_key(
     idempotency_key: str,
     result: str,
 ) -> None:
-    ensure_mcp_schema()
-    conn = get_connection()
-    try:
-        conn.execute(
-            """
-            UPDATE mcp_idempotency_records
-            SET status = 'succeeded', result = %s, updated_at = now()
-            WHERE user_id = %s AND server_name = %s AND tool_name = %s
-              AND idempotency_key = %s
-            """,
-            (result, user_id, server_name, tool_name, idempotency_key),
+    with SessionLocal.begin() as session:
+        session.execute(
+            update(McpIdempotencyRecord)
+            .where(_idempotency_key_matches(user_id, server_name, tool_name, idempotency_key))
+            .values(status="succeeded", result=result, updated_at=func.now())
         )
-        conn.commit()
-    finally:
-        conn.close()
 
 
 def abandon_idempotency_key(
@@ -430,94 +221,68 @@ def abandon_idempotency_key(
     tool_name: str,
     idempotency_key: str,
 ) -> None:
-    ensure_mcp_schema()
-    conn = get_connection()
-    try:
-        conn.execute(
-            """
-            DELETE FROM mcp_idempotency_records
-            WHERE user_id = %s AND server_name = %s AND tool_name = %s
-              AND idempotency_key = %s AND status = 'in_progress'
-            """,
-            (user_id, server_name, tool_name, idempotency_key),
+    with SessionLocal.begin() as session:
+        session.execute(
+            delete(McpIdempotencyRecord).where(
+                _idempotency_key_matches(user_id, server_name, tool_name, idempotency_key),
+                McpIdempotencyRecord.status == "in_progress",
+            )
         )
-        conn.commit()
-    finally:
-        conn.close()
 
 
 def upsert_user_credentials(user_id: str, server_name: str, credentials: dict[str, Any]) -> None:
-    ensure_mcp_schema()
-    conn = get_connection()
-    try:
-        conn.execute(
-            """
-            INSERT INTO mcp_user_credentials (user_id, server_name, credentials)
-            VALUES (%s, %s, %s)
-            ON CONFLICT (user_id, server_name)
-            DO UPDATE SET credentials = EXCLUDED.credentials, updated_at = now()
-            """,
-            (user_id, server_name, json.dumps(credentials)),
-        )
-        conn.commit()
-    finally:
-        conn.close()
+    stmt = insert(McpUserCredential).values(
+        user_id=user_id, server_name=server_name, credentials=credentials
+    )
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[McpUserCredential.user_id, McpUserCredential.server_name],
+        set_={"credentials": stmt.excluded.credentials, "updated_at": func.now()},
+    )
+    with SessionLocal.begin() as session:
+        session.execute(stmt)
 
 
 def save_oauth_state(state: str, user_id: str, provider: str, ttl_minutes: int = 10) -> None:
-    ensure_mcp_schema()
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=ttl_minutes)
-    conn = get_connection()
-    try:
-        conn.execute(
-            """
-            INSERT INTO mcp_oauth_states (state, user_id, provider, expires_at)
-            VALUES (%s, %s, %s, %s)
-            ON CONFLICT (state)
-            DO UPDATE SET user_id = EXCLUDED.user_id, provider = EXCLUDED.provider, expires_at = EXCLUDED.expires_at
-            """,
-            (state, user_id, provider, expires_at),
-        )
-        conn.commit()
-    finally:
-        conn.close()
+    stmt = insert(McpOAuthState).values(
+        state=state, user_id=user_id, provider=provider, expires_at=expires_at
+    )
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[McpOAuthState.state],
+        set_={
+            "user_id": stmt.excluded.user_id,
+            "provider": stmt.excluded.provider,
+            "expires_at": stmt.excluded.expires_at,
+        },
+    )
+    with SessionLocal.begin() as session:
+        session.execute(stmt)
 
 
 def consume_oauth_state(state: str, provider: str) -> str | None:
-    ensure_mcp_schema()
-    conn = get_connection()
-    try:
-        row = conn.execute(
-            """
-            DELETE FROM mcp_oauth_states
-            WHERE state = %s AND provider = %s AND expires_at > now()
-            RETURNING user_id
-            """,
-            (state, provider),
-        ).fetchone()
-        conn.commit()
-        return row[0] if row else None
-    finally:
-        conn.close()
+    with SessionLocal.begin() as session:
+        return session.scalar(
+            delete(McpOAuthState)
+            .where(
+                McpOAuthState.state == state,
+                McpOAuthState.provider == provider,
+                McpOAuthState.expires_at > func.now(),
+            )
+            .returning(McpOAuthState.user_id)
+        )
 
 
 def get_user_credentials(user_id: str | None, server_name: str) -> dict[str, Any]:
     if not user_id:
         return {}
-    ensure_mcp_schema()
-    conn = get_connection()
-    try:
-        row = conn.execute(
-            """
-            SELECT credentials
-            FROM mcp_user_credentials
-            WHERE user_id = %s AND server_name = %s
-            """,
-            (user_id, server_name),
-        ).fetchone()
-        return row[0] if row else {}
-    finally:
-        conn.close()
+    with SessionLocal() as session:
+        credentials = session.scalar(
+            select(McpUserCredential.credentials).where(
+                McpUserCredential.user_id == user_id,
+                McpUserCredential.server_name == server_name,
+            )
+        )
+    return credentials or {}
 
 
 def inject_user_credentials(
@@ -615,58 +380,39 @@ def add_audit_log(
     result_preview: str | None = None,
     error: str | None = None,
 ) -> None:
-    ensure_mcp_schema()
-    conn = get_connection()
-    try:
-        conn.execute(
-            """
-            INSERT INTO mcp_tool_audit_logs
-                (user_id, server_name, tool_name, status, arguments, result_preview, error)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-            """,
-            (
-                user_id,
-                server_name,
-                tool_name,
-                status,
-                json.dumps(redact_arguments(arguments), ensure_ascii=False),
-                result_preview,
-                error,
-            ),
+    with SessionLocal.begin() as session:
+        session.add(
+            McpToolAuditLog(
+                user_id=user_id,
+                server_name=server_name,
+                tool_name=tool_name,
+                status=status,
+                arguments=redact_arguments(arguments),
+                result_preview=result_preview,
+                error=error,
+            )
         )
-        conn.commit()
-    finally:
-        conn.close()
 
 
 def list_audit_logs(user_id: str, limit: int = 50) -> list[MCPAuditRecord]:
-    ensure_mcp_schema()
-    conn = get_connection()
-    try:
-        rows = conn.execute(
-            """
-            SELECT id, user_id, server_name, tool_name, status, arguments,
-                   result_preview, error, created_at
-            FROM mcp_tool_audit_logs
-            WHERE user_id = %s
-            ORDER BY created_at DESC, id DESC
-            LIMIT %s
-            """,
-            (user_id, limit),
-        ).fetchall()
+    with SessionLocal() as session:
+        logs = session.scalars(
+            select(McpToolAuditLog)
+            .where(McpToolAuditLog.user_id == user_id)
+            .order_by(McpToolAuditLog.created_at.desc(), McpToolAuditLog.id.desc())
+            .limit(limit)
+        )
         return [
             MCPAuditRecord(
-                id=row[0],
-                user_id=row[1],
-                server_name=row[2],
-                tool_name=row[3],
-                status=row[4],
-                arguments=row[5],
-                result_preview=row[6],
-                error=row[7],
-                created_at=row[8].isoformat(),
+                id=log.id,
+                user_id=log.user_id,
+                server_name=log.server_name,
+                tool_name=log.tool_name,
+                status=log.status,
+                arguments=log.arguments,
+                result_preview=log.result_preview,
+                error=log.error,
+                created_at=log.created_at.isoformat(),
             )
-            for row in rows
+            for log in logs
         ]
-    finally:
-        conn.close()
