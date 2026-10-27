@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "supportagent"
 version = "0.1.0"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "pypdf",
     "openai",
@@ -43,7 +43,7 @@ include = ["supportagent*"]
 "" = "src/backend"
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py311"
 src = ["src/backend"]
 
 [tool.vercel]
