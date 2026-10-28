@@ -27,7 +27,6 @@ def ensure_conversation(session: Session, thread_id: str, user_id: str) -> bool:
         where=Conversation.user_id == user_id,
     ).returning(Conversation.thread_id)
     return session.scalar(stmt) is not None
-    
 
 
 def get_short_memory(
@@ -39,8 +38,10 @@ def get_short_memory(
     messages = session.scalars(
         select(ConversationMessage)
         .join(Conversation, Conversation.thread_id == ConversationMessage.thread_id)
-        .where(ConversationMessage.thread_id == thread_id,
-               Conversation.user_id == user_id,)
+        .where(
+            ConversationMessage.thread_id == thread_id,
+            Conversation.user_id == user_id,
+        )
         .order_by(ConversationMessage.created_at.desc(), ConversationMessage.id.desc())
         .limit(limit)
     ).all()
@@ -136,7 +137,9 @@ def _delete_answer_after(session: Session, question: ConversationMessage) -> Non
         .limit(1)
     )
     if answer_id is not None:
-        session.execute(delete(ConversationMessage).where(ConversationMessage.id == answer_id))
+        session.execute(
+            delete(ConversationMessage).where(ConversationMessage.id == answer_id)
+        )
 
 
 def _touch_conversation(session: Session, thread_id: str) -> None:

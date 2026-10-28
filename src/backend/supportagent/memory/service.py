@@ -37,7 +37,9 @@ def load_memory_context(
             long_memories = search_long_memories(session, user_id, query_embedding)
         return short_memory, long_memories
     except Exception:
-        logger.exception("memory_load_failed thread_id=%s user_id=%s", thread_id, user_id)
+        logger.exception(
+            "memory_load_failed thread_id=%s user_id=%s", thread_id, user_id
+        )
         return [], []
 
 
@@ -50,7 +52,9 @@ def get_thread_messages(
         with SessionLocal() as session:
             return select_thread_messages(session, thread_id, user_id, limit=limit)
     except Exception:
-        logger.exception("thread_messages_load_failed thread_id=%s user_id=%s", thread_id, user_id)
+        logger.exception(
+            "thread_messages_load_failed thread_id=%s user_id=%s", thread_id, user_id
+        )
         return []
 
 
@@ -74,9 +78,16 @@ def update_thread_user_message(
 ) -> bool:
     try:
         with SessionLocal.begin() as session:
-            return update_user_message_row(session, thread_id, user_id, message_id, content)
+            return update_user_message_row(
+                session, thread_id, user_id, message_id, content
+            )
     except Exception:
-        logger.exception("thread_message_update_failed thread_id=%s user_id=%s message_id=%s", thread_id, user_id, message_id)
+        logger.exception(
+            "thread_message_update_failed thread_id=%s user_id=%s message_id=%s",
+            thread_id,
+            user_id,
+            message_id,
+        )
         return False
 
 
@@ -89,7 +100,12 @@ def delete_thread_user_turn(
         with SessionLocal.begin() as session:
             return delete_user_turn_row(session, thread_id, user_id, message_id)
     except Exception:
-        logger.exception("thread_turn_delete_failed thread_id=%s user_id=%s message_id=%s", thread_id, user_id, message_id)
+        logger.exception(
+            "thread_turn_delete_failed thread_id=%s user_id=%s message_id=%s",
+            thread_id,
+            user_id,
+            message_id,
+        )
         return False
 
 
@@ -120,7 +136,9 @@ def save_memory_turn(
             memory_embedding = embed_texts(get_embedding_client(), [memory_text])[0]
             add_long_memory(session, user_id, thread_id, memory_text, memory_embedding)
     except Exception:
-        logger.exception("memory_save_failed thread_id=%s user_id=%s", thread_id, user_id)
+        logger.exception(
+            "memory_save_failed thread_id=%s user_id=%s", thread_id, user_id
+        )
 
 
 def record_mcp_action_turn(
@@ -148,4 +166,6 @@ def record_mcp_action_turn(
             add_message(session, thread_id, "user", question)
             add_message(session, thread_id, "assistant", summary)
     except Exception:
-        logger.exception("mcp_action_turn_save_failed thread_id=%s user_id=%s", thread_id, user_id)
+        logger.exception(
+            "mcp_action_turn_save_failed thread_id=%s user_id=%s", thread_id, user_id
+        )

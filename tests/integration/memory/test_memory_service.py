@@ -48,7 +48,12 @@ def test_short_memory_keeps_last_six_messages_oldest_first():
     short_memory, _ = load_memory_context("t-1", "alice", "Und weiter?")
 
     assert [message.content for message in short_memory] == [
-        "q3", "a3", "q4", "a4", "q5", "a5",
+        "q3",
+        "a3",
+        "q4",
+        "a4",
+        "q5",
+        "a5",
     ]
 
 
@@ -139,6 +144,11 @@ def test_other_user_cannot_take_over_thread():
 
     save_memory_turn("t-1", "bob", "Bobs Frage", "Bobs Antwort")
 
-    assert [thread.thread_id for thread in list_conversation_threads("alice")] == ["t-1"]
+    assert [thread.thread_id for thread in list_conversation_threads("alice")] == [
+        "t-1"
+    ]
     assert list_conversation_threads("bob") == []
-    assert turns(get_thread_messages("t-1", "alice")) == [("user", "Frage"),("assistant", "Antwort"),]
+    assert turns(get_thread_messages("t-1", "alice")) == [
+        ("user", "Frage"),
+        ("assistant", "Antwort"),
+    ]
