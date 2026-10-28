@@ -11,8 +11,8 @@ from .schemas import (
     ProposedAction,
 )
 from .service import (
-    approve_action,
     apply_human_claim_decision,
+    approve_action,
     create_claim,
     create_claim_document,
     create_proposed_action,
@@ -23,7 +23,6 @@ from .service import (
     start_claim_review_run,
     submit_claim_for_review,
 )
-from .store import ensure_claim_schema
 
 __all__ = [
     "ActionStatus",
@@ -41,7 +40,6 @@ __all__ = [
     "create_claim",
     "create_claim_document",
     "create_proposed_action",
-    "ensure_claim_schema",
     "get_claim",
     "get_claim_review_run",
     "list_claims",

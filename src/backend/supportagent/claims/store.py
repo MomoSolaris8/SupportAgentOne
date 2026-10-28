@@ -1,7 +1,7 @@
 from typing import Any
 
-import psycopg
-from psycopg.types.json import Json, Jsonb
+from sqlalchemy import func, select, update
+from sqlalchemy.orm import Session
 
 from supportagent.claims.schemas import (
     Claim,
@@ -11,358 +11,270 @@ from supportagent.claims.schemas import (
     ProposedAction,
 )
 
-
-def ensure_claim_schema() -> None:
-    from supportagent.rag.vector_store import get_connection
-
-    conn = get_connection()
-    try:
-        create_claim_schema(conn)
-    finally:
-        conn.close()
+from supportagent.db.models import Claim as ClaimRow
+from supportagent.db.models import ClaimActionApproval
+from supportagent.db.models import ClaimAuditEvent as ClaimAuditEventRow
+from supportagent.db.models import ClaimDocument as ClaimDocumentRow
+from supportagent.db.models import ClaimReviewRun as ClaimReviewRunRow
+from supportagent.db.models import ProposedAction as ProposedActionRow
 
 
-def create_claim_schema(conn: psycopg.Connection) -> None:
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS claims (
-            id TEXT PRIMARY KEY,
-            owner_user_id TEXT NOT NULL,
-            policy_id TEXT NOT NULL,
-            product_line TEXT NOT NULL DEFAULT 'unknown',
-            policy_version TEXT,
-            jurisdiction TEXT NOT NULL DEFAULT 'DE',
-            customer_reference TEXT NOT NULL,
-            claim_type TEXT NOT NULL,
-            incident_date TEXT,
-            status TEXT NOT NULL,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-        )
-        """
-    )
-    conn.execute("ALTER TABLE claims ADD COLUMN IF NOT EXISTS product_line TEXT NOT NULL DEFAULT 'unknown'")
-    conn.execute("ALTER TABLE claims ADD COLUMN IF NOT EXISTS policy_version TEXT")
-    conn.execute("ALTER TABLE claims ADD COLUMN IF NOT EXISTS jurisdiction TEXT NOT NULL DEFAULT 'DE'")
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS claim_documents (
-            id TEXT PRIMARY KEY,
-            claim_id TEXT NOT NULL REFERENCES claims(id) ON DELETE CASCADE,
-            uploaded_file_id TEXT,
-            document_type TEXT NOT NULL,
-            filename TEXT NOT NULL,
-            extraction_status TEXT NOT NULL DEFAULT 'PENDING',
-            extracted_fields JSONB NOT NULL DEFAULT '{}'::jsonb,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-        )
-        """
-    )
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS proposed_actions (
-            id TEXT PRIMARY KEY,
-            claim_id TEXT NOT NULL REFERENCES claims(id) ON DELETE CASCADE,
-            run_id TEXT,
-            action_type TEXT NOT NULL,
-            tool_server TEXT NOT NULL,
-            tool_name TEXT NOT NULL,
-            arguments JSONB NOT NULL DEFAULT '{}'::jsonb,
-            reason TEXT NOT NULL,
-            risk_level TEXT NOT NULL,
-            status TEXT NOT NULL,
-            proposed_by TEXT NOT NULL,
-            approved_by TEXT,
-            approved_at TIMESTAMPTZ,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-        )
-        """
-    )
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS claim_action_approvals (
-            id BIGSERIAL PRIMARY KEY,
-            proposed_action_id TEXT NOT NULL REFERENCES proposed_actions(id) ON DELETE CASCADE,
-            actor_user_id TEXT NOT NULL,
-            decision TEXT NOT NULL CHECK (decision IN ('APPROVED', 'REJECTED')),
-            comment TEXT,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-        )
-        """
-    )
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS claim_audit_events (
-            id BIGSERIAL PRIMARY KEY,
-            claim_id TEXT NOT NULL REFERENCES claims(id) ON DELETE CASCADE,
-            actor_user_id TEXT NOT NULL,
-            event_type TEXT NOT NULL,
-            payload JSONB NOT NULL DEFAULT '{}'::jsonb,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-        )
-        """
-    )
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS claim_review_runs (
-            id TEXT PRIMARY KEY,
-            claim_id TEXT NOT NULL REFERENCES claims(id) ON DELETE CASCADE,
-            owner_user_id TEXT NOT NULL,
-            status TEXT NOT NULL,
-            current_step TEXT NOT NULL,
-            result JSONB,
-            error TEXT,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-            completed_at TIMESTAMPTZ
-        )
-        """
-    )
-    conn.execute("CREATE INDEX IF NOT EXISTS claims_owner_updated_idx ON claims (owner_user_id, updated_at DESC)")
-    conn.execute("CREATE INDEX IF NOT EXISTS claim_documents_claim_idx ON claim_documents (claim_id, created_at)")
-    conn.execute("CREATE INDEX IF NOT EXISTS proposed_actions_claim_idx ON proposed_actions (claim_id, created_at DESC)")
-    conn.execute("CREATE INDEX IF NOT EXISTS claim_audit_claim_idx ON claim_audit_events (claim_id, created_at)")
-    conn.execute("CREATE INDEX IF NOT EXISTS claim_review_runs_claim_idx ON claim_review_runs (claim_id, created_at DESC)")
-    conn.commit()
-
-
-def _claim(row: tuple[Any, ...]) -> Claim:
+def _claim(row: ClaimRow) -> Claim:
     return Claim(
-        id=row[0], owner_user_id=row[1], policy_id=row[2], customer_reference=row[3],
-        claim_type=row[4], incident_date=row[5], status=row[6],
-        created_at=row[7].isoformat(), updated_at=row[8].isoformat(),
-        product_line=row[9], policy_version=row[10], jurisdiction=row[11],
+        id=row.id,
+        owner_user_id=row.owner_user_id,
+        policy_id=row.policy_id,
+        customer_reference=row.customer_reference,
+        claim_type=row.claim_type,
+        incident_date=row.incident_date,
+        status=row.status,
+        created_at=row.created_at.isoformat(),
+        updated_at=row.updated_at.isoformat(),
+        product_line=row.product_line,
+        policy_version=row.policy_version,
+        jurisdiction=row.jurisdiction,
     )
 
 
-def _document(row: tuple[Any, ...]) -> ClaimDocument:
+def _document(row: ClaimDocumentRow) -> ClaimDocument:
     return ClaimDocument(
-        id=row[0], claim_id=row[1], uploaded_file_id=row[2], document_type=row[3],
-        filename=row[4], extraction_status=row[5], extracted_fields=row[6] or {},
-        created_at=row[7].isoformat(),
+        id=row.id,
+        claim_id=row.claim_id,
+        uploaded_file_id=row.uploaded_file_id,
+        document_type=row.document_type,
+        filename=row.filename,
+        extraction_status=row.extraction_status,
+        extracted_fields=row.extracted_fields or {},
+        created_at=row.created_at.isoformat(),
     )
 
 
-def _action(row: tuple[Any, ...]) -> ProposedAction:
+def _action(row: ProposedActionRow) -> ProposedAction:
     return ProposedAction(
-        id=row[0], claim_id=row[1], run_id=row[2], action_type=row[3],
-        tool_server=row[4], tool_name=row[5], arguments=row[6] or {}, reason=row[7],
-        risk_level=row[8], status=row[9], proposed_by=row[10], approved_by=row[11],
-        approved_at=row[12].isoformat() if row[12] else None,
-        created_at=row[13].isoformat(), updated_at=row[14].isoformat(),
+        id=row.id,
+        claim_id=row.claim_id,
+        run_id=row.run_id,
+        action_type=row.action_type,
+        tool_server=row.tool_server,
+        tool_name=row.tool_name,
+        arguments=row.arguments or {},
+        reason=row.reason,
+        risk_level=row.risk_level,
+        status=row.status,
+        proposed_by=row.proposed_by,
+        approved_by=row.approved_by,
+        approved_at=row.approved_at.isoformat() if row.approved_at else None,
+        created_at=row.created_at.isoformat(),
+        updated_at=row.updated_at.isoformat(),
     )
 
 
-def _review_run(row: tuple[Any, ...]) -> ClaimReviewRun:
+def _review_run(row: ClaimReviewRunRow) -> ClaimReviewRun:
     return ClaimReviewRun(
-        id=row[0],
-        claim_id=row[1],
-        status=row[2],
-        current_step=row[3],
-        result=row[4],
-        error=row[5],
-        created_at=row[6].isoformat(),
-        updated_at=row[7].isoformat(),
-        completed_at=row[8].isoformat() if row[8] else None,
+        id=row.id,
+        claim_id=row.claim_id,
+        status=row.status,
+        current_step=row.current_step,
+        result=row.result,
+        error=row.error,
+        created_at=row.created_at.isoformat(),
+        updated_at=row.updated_at.isoformat(),
+        completed_at=row.completed_at.isoformat() if row.completed_at else None,
     )
 
 
-def _audit_event(row: tuple[Any, ...]) -> ClaimAuditEvent:
+def _audit_event(row: ClaimAuditEventRow) -> ClaimAuditEvent:
     return ClaimAuditEvent(
-        id=row[0],
-        event_type=row[1],
-        payload=row[2] or {},
-        actor_user_id=row[3],
-        created_at=row[4].isoformat(),
+        id=row.id,
+        event_type=row.event_type,
+        payload=row.payload or {},
+        actor_user_id=row.actor_user_id,
+        created_at=row.created_at.isoformat(),
     )
 
 
-CLAIM_SELECT = """
-    SELECT id, owner_user_id, policy_id, customer_reference, claim_type,
-           incident_date, status, created_at, updated_at,
-           product_line, policy_version, jurisdiction
-    FROM claims
-"""
-
-ACTION_SELECT = """
-    SELECT proposed_actions.id, proposed_actions.claim_id, proposed_actions.run_id,
-           proposed_actions.action_type, proposed_actions.tool_server,
-           proposed_actions.tool_name, proposed_actions.arguments,
-           proposed_actions.reason, proposed_actions.risk_level,
-           proposed_actions.status, proposed_actions.proposed_by,
-           proposed_actions.approved_by, proposed_actions.approved_at,
-           proposed_actions.created_at, proposed_actions.updated_at
-    FROM proposed_actions
-"""
-
-REVIEW_RUN_SELECT = """
-    SELECT id, claim_id, status, current_step, result, error,
-           created_at, updated_at, completed_at
-    FROM claim_review_runs
-"""
-
-
-def insert_claim(conn: psycopg.Connection, values: dict[str, Any]) -> Claim:
-    row = conn.execute(
-        """
-        INSERT INTO claims (
-            id, owner_user_id, policy_id, customer_reference, claim_type,
-            incident_date, status, product_line, policy_version, jurisdiction
-        )
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        RETURNING id, owner_user_id, policy_id, customer_reference, claim_type,
-                  incident_date, status, created_at, updated_at,
-                  product_line, policy_version, jurisdiction
-        """,
-        (values["id"], values["owner_user_id"], values["policy_id"], values["customer_reference"],
-         values["claim_type"], values.get("incident_date"), values["status"],
-         values["product_line"], values.get("policy_version"), values["jurisdiction"]),
-    ).fetchone()
+def insert_claim(session: Session, values: dict[str, Any]) -> Claim:
+    row = ClaimRow(
+        id=values["id"],
+        owner_user_id=values["owner_user_id"],
+        policy_id=values["policy_id"],
+        customer_reference=values["customer_reference"],
+        claim_type=values["claim_type"],
+        incident_date=values.get("incident_date"),
+        status=values["status"],
+        product_line=values["product_line"],
+        policy_version=values.get("policy_version"),
+        jurisdiction=values["jurisdiction"],
+    )
+    session.add(row)
+    session.flush()
     return _claim(row)
 
 
-def fetch_claim(conn: psycopg.Connection, claim_id: str, owner_user_id: str) -> Claim | None:
-    row = conn.execute(CLAIM_SELECT + " WHERE id = %s AND owner_user_id = %s", (claim_id, owner_user_id)).fetchone()
+def fetch_claim(session: Session, claim_id: str, owner_user_id: str) -> Claim | None:
+    row = session.scalar(
+        select(ClaimRow).where(
+            ClaimRow.id == claim_id, ClaimRow.owner_user_id == owner_user_id
+        )
+    )
     return _claim(row) if row else None
 
 
-def fetch_claims(conn: psycopg.Connection, owner_user_id: str) -> list[Claim]:
-    rows = conn.execute(CLAIM_SELECT + " WHERE owner_user_id = %s ORDER BY updated_at DESC", (owner_user_id,)).fetchall()
+def fetch_claims(session: Session, owner_user_id: str) -> list[Claim]:
+    rows = session.scalars(
+        select(ClaimRow)
+        .where(ClaimRow.owner_user_id == owner_user_id)
+        .order_by(ClaimRow.updated_at.desc())
+    )
     return [_claim(row) for row in rows]
 
 
-def update_claim_status(conn: psycopg.Connection, claim_id: str, status: str) -> Claim:
-    row = conn.execute(
-        """
-        UPDATE claims
-        SET status = %s, updated_at = now()
-        WHERE id = %s
-        RETURNING id, owner_user_id, policy_id, customer_reference, claim_type,
-                  incident_date, status, created_at, updated_at,
-                  product_line, policy_version, jurisdiction
-        """,
-        (status, claim_id),
-    ).fetchone()
+def update_claim_status(session: Session, claim_id: str, status: str) -> Claim:
+    row = session.scalar(
+        update(ClaimRow)
+        .where(ClaimRow.id == claim_id)
+        .values(status=status, updated_at=func.now())
+        .returning(ClaimRow)
+    )
     return _claim(row)
 
 
-def insert_document(conn: psycopg.Connection, values: dict[str, Any]) -> ClaimDocument:
-    row = conn.execute(
-        """
-        INSERT INTO claim_documents (
-            id, claim_id, uploaded_file_id, document_type, filename, extraction_status, extracted_fields
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s)
-        RETURNING id, claim_id, uploaded_file_id, document_type, filename,
-                  extraction_status, extracted_fields, created_at
-        """,
-        (values["id"], values["claim_id"], values.get("uploaded_file_id"), values["document_type"],
-         values["filename"], values["extraction_status"], Json(values.get("extracted_fields", {}))),
-    ).fetchone()
+def insert_document(session: Session, values: dict[str, Any]) -> ClaimDocument:
+    row = ClaimDocumentRow(
+        id=values["id"],
+        claim_id=values["claim_id"],
+        uploaded_file_id=values.get("uploaded_file_id"),
+        document_type=values["document_type"],
+        filename=values["filename"],
+        extraction_status=values["extraction_status"],
+        extracted_fields=values.get("extracted_fields", {}),
+    )
+    session.add(row)
+    session.flush()
     return _document(row)
 
 
-def fetch_documents(conn: psycopg.Connection, claim_id: str) -> list[ClaimDocument]:
-    rows = conn.execute(
-        """
-        SELECT id, claim_id, uploaded_file_id, document_type, filename,
-               extraction_status, extracted_fields, created_at
-        FROM claim_documents WHERE claim_id = %s ORDER BY created_at
-        """,
-        (claim_id,),
-    ).fetchall()
+def fetch_documents(session: Session, claim_id: str) -> list[ClaimDocument]:
+    rows = session.scalars(
+        select(ClaimDocumentRow)
+        .where(ClaimDocumentRow.claim_id == claim_id)
+        .order_by(ClaimDocumentRow.created_at)
+    )
     return [_document(row) for row in rows]
 
 
-def insert_action(conn: psycopg.Connection, values: dict[str, Any]) -> ProposedAction:
-    row = conn.execute(
-        """
-        INSERT INTO proposed_actions (
-            id, claim_id, run_id, action_type, tool_server, tool_name, arguments,
-            reason, risk_level, status, proposed_by
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        RETURNING id, claim_id, run_id, action_type, tool_server, tool_name, arguments,
-                  reason, risk_level, status, proposed_by, approved_by, approved_at,
-                  created_at, updated_at
-        """,
-        (values["id"], values["claim_id"], values.get("run_id"), values["action_type"],
-         values["tool_server"], values["tool_name"], Json(values.get("arguments", {})),
-         values["reason"], values["risk_level"], values["status"], values["proposed_by"]),
-    ).fetchone()
+def insert_action(session: Session, values: dict[str, Any]) -> ProposedAction:
+    row = ProposedActionRow(
+        id=values["id"],
+        claim_id=values["claim_id"],
+        run_id=values.get("run_id"),
+        action_type=values["action_type"],
+        tool_server=values["tool_server"],
+        tool_name=values["tool_name"],
+        arguments=values.get("arguments", {}),
+        reason=values["reason"],
+        risk_level=values["risk_level"],
+        status=values["status"],
+        proposed_by=values["proposed_by"],
+    )
+    session.add(row)
+    session.flush()
     return _action(row)
 
 
-def fetch_actions(conn: psycopg.Connection, claim_id: str) -> list[ProposedAction]:
-    rows = conn.execute(ACTION_SELECT + " WHERE claim_id = %s ORDER BY created_at DESC", (claim_id,)).fetchall()
+def fetch_actions(session: Session, claim_id: str) -> list[ProposedAction]:
+    rows = session.scalars(
+        select(ProposedActionRow)
+        .where(ProposedActionRow.claim_id == claim_id)
+        .order_by(ProposedActionRow.created_at.desc())
+    )
     return [_action(row) for row in rows]
 
 
 def fetch_action_for_owner(
-    conn: psycopg.Connection, action_id: str, claim_id: str, owner_user_id: str, *, for_update: bool = False
+    session: Session,
+    action_id: str,
+    claim_id: str,
+    owner_user_id: str,
+    *,
+    for_update: bool = False,
 ) -> ProposedAction | None:
-    suffix = " FOR UPDATE" if for_update else ""
-    row = conn.execute(
-        ACTION_SELECT + " JOIN claims ON claims.id = proposed_actions.claim_id "
-        "WHERE proposed_actions.id = %s AND proposed_actions.claim_id = %s AND claims.owner_user_id = %s" + suffix,
-        (action_id, claim_id, owner_user_id),
-    ).fetchone()
+    stmt = (
+        select(ProposedActionRow)
+        .join(ClaimRow, ClaimRow.id == ProposedActionRow.claim_id)
+        .where(
+            ProposedActionRow.id == action_id,
+            ProposedActionRow.claim_id == claim_id,
+            ClaimRow.owner_user_id == owner_user_id,
+        )
+    )
+    if for_update:
+        stmt = stmt.with_for_update()
+    row = session.scalar(stmt)
     return _action(row) if row else None
 
 
 def record_action_decision(
-    conn: psycopg.Connection, action_id: str, actor_user_id: str, decision: str, comment: str | None
+    session: Session,
+    action_id: str,
+    actor_user_id: str,
+    decision: str,
+    comment: str | None,
 ) -> ProposedAction:
-    conn.execute(
-        """
-        INSERT INTO claim_action_approvals (proposed_action_id, actor_user_id, decision, comment)
-        VALUES (%s, %s, %s, %s)
-        """,
-        (action_id, actor_user_id, decision, comment),
+    session.add(
+        ClaimActionApproval(
+            proposed_action_id=action_id,
+            actor_user_id=actor_user_id,
+            decision=decision,
+            comment=comment,
+        )
     )
-    row = conn.execute(
-        """
-        UPDATE proposed_actions
-        SET status = %s,
-            approved_by = CASE WHEN %s = 'APPROVED' THEN %s ELSE NULL END,
-            approved_at = CASE WHEN %s = 'APPROVED' THEN now() ELSE NULL END,
-            updated_at = now()
-        WHERE id = %s
-        RETURNING id, claim_id, run_id, action_type, tool_server, tool_name, arguments,
-                  reason, risk_level, status, proposed_by, approved_by, approved_at,
-                  created_at, updated_at
-        """,
-        (decision, decision, actor_user_id, decision, action_id),
-    ).fetchone()
+    approved = decision == "APPROVED"
+    row = session.scalar(
+        update(ProposedActionRow)
+        .where(ProposedActionRow.id == action_id)
+        .values(
+            status=decision,
+            approved_by=actor_user_id if approved else None,
+            approved_at=func.now() if approved else None,
+            updated_at=func.now(),
+        )
+        .returning(ProposedActionRow)
+    )
     return _action(row)
 
 
 def add_audit_event(
-    conn: psycopg.Connection, claim_id: str, actor_user_id: str, event_type: str, payload: dict[str, Any]
+    session: Session,
+    claim_id: str,
+    actor_user_id: str,
+    event_type: str,
+    payload: dict[str, Any],
 ) -> None:
-    conn.execute(
-        "INSERT INTO claim_audit_events (claim_id, actor_user_id, event_type, payload) VALUES (%s, %s, %s, %s)",
-        (claim_id, actor_user_id, event_type, Json(payload)),
+    session.add(
+        ClaimAuditEventRow(
+            claim_id=claim_id,
+            actor_user_id=actor_user_id,
+            event_type=event_type,
+            payload=payload,
+        )
     )
 
 
 def fetch_audit_events(
-    conn: psycopg.Connection, claim_id: str, *, limit: int = 50
+    session: Session, claim_id: str, *, limit: int = 50
 ) -> list[ClaimAuditEvent]:
-    rows = conn.execute(
-        """
-        SELECT id, event_type, payload, actor_user_id, created_at
-        FROM claim_audit_events
-        WHERE claim_id = %s
-        ORDER BY created_at DESC
-        LIMIT %s
-        """,
-        (claim_id, limit),
-    ).fetchall()
+    rows = session.scalars(
+        select(ClaimAuditEventRow)
+        .where(ClaimAuditEventRow.claim_id == claim_id)
+        .order_by(ClaimAuditEventRow.created_at.desc())
+        .limit(limit)
+    )
     return [_audit_event(row) for row in rows]
 
 
 def insert_review_run(
-    conn: psycopg.Connection,
+    session: Session,
     run_id: str,
     claim_id: str,
     owner_user_id: str,
@@ -370,22 +282,20 @@ def insert_review_run(
     status: str = "QUEUED",
     current_step: str = "QUEUED",
 ) -> ClaimReviewRun:
-    row = conn.execute(
-        """
-        INSERT INTO claim_review_runs (
-            id, claim_id, owner_user_id, status, current_step
-        )
-        VALUES (%s, %s, %s, %s, %s)
-        RETURNING id, claim_id, status, current_step, result, error,
-                  created_at, updated_at, completed_at
-        """,
-        (run_id, claim_id, owner_user_id, status, current_step),
-    ).fetchone()
+    row = ClaimReviewRunRow(
+        id=run_id,
+        claim_id=claim_id,
+        owner_user_id=owner_user_id,
+        status=status,
+        current_step=current_step,
+    )
+    session.add(row)
+    session.flush()
     return _review_run(row)
 
 
 def update_review_run(
-    conn: psycopg.Connection,
+    session: Session,
     run_id: str,
     *,
     status: str | None = None,
@@ -394,62 +304,52 @@ def update_review_run(
     error: str | None = None,
     complete: bool = False,
 ) -> ClaimReviewRun:
-    row = conn.execute(
-        """
-        UPDATE claim_review_runs
-        SET status = COALESCE(%s, status),
-            current_step = COALESCE(%s, current_step),
-            result = COALESCE(%s, result),
-            error = %s,
-            updated_at = now(),
-            completed_at = CASE WHEN %s THEN now() ELSE completed_at END
-        WHERE id = %s
-        RETURNING id, claim_id, status, current_step, result, error,
-                  created_at, updated_at, completed_at
-        """,
-        (
-            status,
-            current_step,
-            Jsonb(result) if result is not None else None,
-            error,
-            complete,
-            run_id,
-        ),
-    ).fetchone()
+    values: dict[str, Any] = {"error": error, "updated_at": func.now()}
+    if status is not None:
+        values["status"] = status
+    if current_step is not None:
+        values["current_step"] = current_step
+    if result is not None:
+        values["result"] = result
+    if complete:
+        values["completed_at"] = func.now()
+    row = session.scalar(
+        update(ClaimReviewRunRow)
+        .where(ClaimReviewRunRow.id == run_id)
+        .values(**values)
+        .returning(ClaimReviewRunRow)
+    )
     return _review_run(row)
 
 
 def fetch_review_run_for_owner(
-    conn: psycopg.Connection,
+    session: Session,
     run_id: str,
     claim_id: str,
     owner_user_id: str,
 ) -> ClaimReviewRun | None:
-    row = conn.execute(
-        REVIEW_RUN_SELECT
-        + """
-          WHERE id = %s
-            AND claim_id = %s
-            AND owner_user_id = %s
-        """,
-        (run_id, claim_id, owner_user_id),
-    ).fetchone()
+    row = session.scalar(
+        select(ClaimReviewRunRow).where(
+            ClaimReviewRunRow.id == run_id,
+            ClaimReviewRunRow.claim_id == claim_id,
+            ClaimReviewRunRow.owner_user_id == owner_user_id,
+        )
+    )
     return _review_run(row) if row else None
 
 
 def fetch_latest_review_run(
-    conn: psycopg.Connection,
+    session: Session,
     claim_id: str,
     owner_user_id: str,
 ) -> ClaimReviewRun | None:
-    row = conn.execute(
-        REVIEW_RUN_SELECT
-        + """
-          WHERE claim_id = %s
-            AND owner_user_id = %s
-          ORDER BY created_at DESC
-          LIMIT 1
-        """,
-        (claim_id, owner_user_id),
-    ).fetchone()
+    row = session.scalar(
+        select(ClaimReviewRunRow)
+        .where(
+            ClaimReviewRunRow.claim_id == claim_id,
+            ClaimReviewRunRow.owner_user_id == owner_user_id,
+        )
+        .order_by(ClaimReviewRunRow.created_at.desc())
+        .limit(1)
+    )
     return _review_run(row) if row else None
