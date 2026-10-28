@@ -19,23 +19,28 @@ def _to_chat_message(message: ConversationMessage) -> ChatMessage:
     )
 
 
-def ensure_conversation(session: Session, thread_id: str, user_id: str) -> None:
+def ensure_conversation(session: Session, thread_id: str, user_id: str) -> bool:
     stmt = insert(Conversation).values(thread_id=thread_id, user_id=user_id)
     stmt = stmt.on_conflict_do_update(
         index_elements=[Conversation.thread_id],
-        set_={"user_id": stmt.excluded.user_id, "updated_at": func.now()},
-    )
-    session.execute(stmt)
+        set_={"updated_at": func.now()},
+        where=Conversation.user_id == user_id,
+    ).returning(Conversation.thread_id)
+    return session.scalar(stmt) is not None
+    
 
 
 def get_short_memory(
     session: Session,
     thread_id: str,
+    user_id: str,
     limit: int = SHORT_MEMORY_LIMIT,
 ) -> list[ChatMessage]:
     messages = session.scalars(
         select(ConversationMessage)
-        .where(ConversationMessage.thread_id == thread_id)
+        .join(Conversation, Conversation.thread_id == ConversationMessage.thread_id)
+        .where(ConversationMessage.thread_id == thread_id,
+               Conversation.user_id == user_id,)
         .order_by(ConversationMessage.created_at.desc(), ConversationMessage.id.desc())
         .limit(limit)
     ).all()

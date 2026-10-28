@@ -32,7 +32,7 @@ def load_memory_context(
     try:
         with SessionLocal.begin() as session:
             ensure_conversation(session, thread_id, user_id)
-            short_memory = get_short_memory(session, thread_id)
+            short_memory = get_short_memory(session, thread_id, user_id)
             query_embedding = embed_texts(get_embedding_client(), [question])[0]
             long_memories = search_long_memories(session, user_id, query_embedding)
         return short_memory, long_memories
@@ -105,7 +105,11 @@ def save_memory_turn(
     user_id = user_id or DEFAULT_USER_ID
     try:
         with SessionLocal.begin() as session:
-            ensure_conversation(session, thread_id, user_id)
+            if not ensure_conversation(session, thread_id, user_id):
+                logger.warning(
+                    "thread_owner_mismatch thread_id=%s user_id=%s", thread_id, user_id
+                )
+                return
             add_message(session, thread_id, "user", question)
             add_message(session, thread_id, "assistant", answer)
 
@@ -136,7 +140,11 @@ def record_mcp_action_turn(
     user_id = user_id or DEFAULT_USER_ID
     try:
         with SessionLocal.begin() as session:
-            ensure_conversation(session, thread_id, user_id)
+            if not ensure_conversation(session, thread_id, user_id):
+                logger.warning(
+                    "thread_owner_mismatch thread_id=%s user_id=%s", thread_id, user_id
+                )
+                return
             add_message(session, thread_id, "user", question)
             add_message(session, thread_id, "assistant", summary)
     except Exception:

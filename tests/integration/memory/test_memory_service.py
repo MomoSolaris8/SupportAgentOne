@@ -125,3 +125,20 @@ def test_deleting_question_removes_whole_turn():
 
     assert delete_thread_user_turn("t-1", "alice", question.id)
     assert get_thread_messages("t-1", "alice") == []
+
+
+# thread ownership
+def test_other_user_cannot_read_thread_via_short_memory():
+    save_memory_turn("t-1", "alice", "Meine Policennummer ist 123", "Notiert.")
+    short_memory, _ = load_memory_context("t-1", "bob", "Was weißt du?")
+    assert short_memory == []
+
+
+def test_other_user_cannot_take_over_thread():
+    save_memory_turn("t-1", "alice", "Frage", "Antwort")
+
+    save_memory_turn("t-1", "bob", "Bobs Frage", "Bobs Antwort")
+
+    assert [thread.thread_id for thread in list_conversation_threads("alice")] == ["t-1"]
+    assert list_conversation_threads("bob") == []
+    assert turns(get_thread_messages("t-1", "alice")) == [("user", "Frage"),("assistant", "Antwort"),]
