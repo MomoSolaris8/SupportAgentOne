@@ -1,10 +1,11 @@
-import os
+from dotenv import load_dotenv
+
+from supportagent.db.session import SessionLocal
 
 from .chunking import chunk_document
-from dotenv import load_dotenv
 from .embeddings import embed_texts, get_embedding_client
 from .ingest import collect_documents
-from .vector_store import create_schema, get_connection, upsert_chunk
+from .vector_store import upsert_chunk
 
 
 def main() -> None:
@@ -17,12 +18,9 @@ def main() -> None:
     client = get_embedding_client()
     embeddings = embed_texts(client, [chunk["content"] for chunk in chunks])
 
-    dimensions = int(os.environ.get("EMBEDDING_DIMENSIONS", "1024"))
-    conn = get_connection()
-    create_schema(conn, dimensions)
-    for chunk, embedding in zip(chunks, embeddings):
-        upsert_chunk(conn, chunk, embedding)
-    conn.commit()
+    with SessionLocal.begin() as session:
+        for chunk, embedding in zip(chunks, embeddings):
+            upsert_chunk(session, chunk, embedding)
     print(f"Stored {len(chunks)} chunks in pgvector")
 
 

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "supportagent"
 version = "0.1.0"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "pypdf",
     "openai",
@@ -26,6 +26,8 @@ dependencies = [
     "langchain-anthropic",
     "boto3",
     "boto3-stubs~=1.43.54",
+    "sqlalchemy>=2.0.54",
+    "alembic>=1.20.0",
 ]
 
 [project.optional-dependencies]
@@ -41,7 +43,7 @@ include = ["supportagent*"]
 "" = "src/backend"
 
 [tool.ruff]
-target-version = "py310"
+target-version = "py311"
 src = ["src/backend"]
 
 [tool.vercel]

@@ -6,22 +6,17 @@ from fastapi import FastAPI
 from supportagent.api.exception_handlers import register_exception_handlers
 from supportagent.api.middleware import register_request_logging
 from supportagent.api.router import register_routes
-from supportagent.claims import ensure_claim_schema
 from supportagent.core.logging_config import configure_logging
-from supportagent.mcp_client.store import ensure_mcp_schema
-from supportagent.rag.vector_store import ensure_rag_schema
-from supportagent.uploads import ensure_upload_schema
+from supportagent.db.session import engine
 
 load_dotenv()
 configure_logging()
 
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    ensure_rag_schema()
-    ensure_mcp_schema()
-    ensure_upload_schema()
-    ensure_claim_schema()
     yield
+    engine.dispose()
 
 
 app = FastAPI(title="SupportAgent", lifespan=lifespan)

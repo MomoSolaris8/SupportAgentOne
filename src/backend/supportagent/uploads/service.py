@@ -5,9 +5,12 @@ from pathlib import Path
 
 from fastapi import UploadFile
 
-from supportagent.rag.vector_store import get_connection
+from supportagent.db.session import SessionLocal
 from supportagent.storage import get_storage
-from supportagent.uploads.store import create_uploaded_file, ensure_upload_schema, fetch_uploaded_files
+from supportagent.uploads.store import (
+    create_uploaded_file,
+    fetch_uploaded_files,
+)
 from supportagent.vision.service import analyze_image
 
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
@@ -70,11 +73,9 @@ async def save_uploaded_image(
     )
     image_summary = image_analysis.summary(filename)
 
-    ensure_upload_schema()
-    conn = get_connection()
-    try:
+    with SessionLocal.begin() as session:
         create_uploaded_file(
-            conn,
+            session,
             file_id=image_id,
             user_id=user_id,
             thread_id=thread_id,
@@ -86,9 +87,6 @@ async def save_uploaded_image(
             image_summary=image_summary,
             image_analysis=image_analysis.to_dict(),
         )
-        conn.commit()
-    finally:
-        conn.close()
 
     return UploadedImage(
         id=image_id,
@@ -103,11 +101,8 @@ def get_image_contexts(user_id: str, image_ids: list[str] | None) -> list[str]:
     if not image_ids:
         return []
 
-    conn = get_connection()
-    try:
-        rows = fetch_uploaded_files(conn, user_id=user_id, image_ids=image_ids)
-    finally:
-        conn.close()
+    with SessionLocal() as session:
+        rows = fetch_uploaded_files(session, user_id=user_id, image_ids=image_ids)
 
     contexts = []
     for row in rows:

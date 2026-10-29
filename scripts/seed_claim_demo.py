@@ -11,39 +11,35 @@ BACKEND = ROOT / "src" / "backend"
 if str(BACKEND) not in sys.path:
     sys.path.insert(0, str(BACKEND))
 
-from supportagent.auth.store import auth_connection, get_user_by_email  # noqa: E402
-from supportagent.claims.store import (  # noqa: E402
-    add_audit_event,
-    create_claim_schema,
-    insert_claim,
-    insert_document,
-)
+from sqlalchemy import select  # noqa: E402
+
+from supportagent.auth.store import get_user_by_email  # noqa: E402
+from supportagent.claims.store import add_audit_event, insert_claim, insert_document  # noqa: E402
+from supportagent.db.models import Claim as ClaimRow  # noqa: E402
+from supportagent.db.session import SessionLocal  # noqa: E402
 
 
 def seed(owner_email: str) -> tuple[int, int]:
     fixtures = json.loads((ROOT / "data" / "synthetic_claims.json").read_text())
-    conn = auth_connection()
-    try:
-        create_claim_schema(conn)
-        user_record = get_user_by_email(conn, owner_email.strip().casefold())
+    with SessionLocal.begin() as session:
+        user_record = get_user_by_email(session, owner_email.strip().casefold())
         if user_record is None:
             raise SystemExit(f"No registered user found for {owner_email!r}. Register in the app first.")
         user, _ = user_record
         claims_created = 0
         documents_created = 0
         for fixture in fixtures:
-            existing = conn.execute(
-                "SELECT owner_user_id FROM claims WHERE id = %s",
-                (fixture["id"],),
-            ).fetchone()
-            if existing:
-                if existing[0] != user.id:
+            existing_owner = session.scalar(
+                select(ClaimRow.owner_user_id).where(ClaimRow.id == fixture["id"])
+            )
+            if existing_owner is not None:
+                if existing_owner != user.id:
                     raise SystemExit(
                         f"Synthetic claim {fixture['id']} already belongs to another user; refusing to reassign it."
                     )
                 continue
             claim = insert_claim(
-                conn,
+                session,
                 {
                     "id": fixture["id"],
                     "owner_user_id": user.id,
@@ -58,7 +54,7 @@ def seed(owner_email: str) -> tuple[int, int]:
             )
             for index, document in enumerate(fixture["documents"], start=1):
                 insert_document(
-                    conn,
+                    session,
                     {
                         "id": f"{fixture['id']}-DOC-{index:02d}",
                         "claim_id": claim.id,
@@ -70,17 +66,14 @@ def seed(owner_email: str) -> tuple[int, int]:
                 )
                 documents_created += 1
             add_audit_event(
-                conn,
+                session,
                 claim.id,
                 user.id,
                 "SYNTHETIC_CLAIM_SEEDED",
                 {"fixture_id": fixture["id"]},
             )
             claims_created += 1
-        conn.commit()
         return claims_created, documents_created
-    finally:
-        conn.close()
 
 
 def main() -> None:

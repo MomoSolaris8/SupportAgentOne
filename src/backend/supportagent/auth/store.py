@@ -1,244 +1,126 @@
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
-import psycopg
-from psycopg.rows import dict_row
+from sqlalchemy import delete, func, select, update
+from sqlalchemy.orm import Session
 
-from supportagent.rag.vector_store import get_connection
+from supportagent.db.models import PasswordResetToken, User, UserSession
+from supportagent.db.session import SessionLocal
 
 from .schemas import AuthUser, CreatedSession
 from .security import create_session_token, hash_session_token, session_ttl_days
 
 
-def create_auth_schema(conn: psycopg.Connection) -> None:
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS users (
-            id TEXT PRIMARY KEY,
-            email TEXT UNIQUE NOT NULL,
-            display_name TEXT,
-            password_hash TEXT NOT NULL,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
-        )
-        """
-    )
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS user_sessions (
-            id TEXT PRIMARY KEY,
-            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            token_hash TEXT UNIQUE NOT NULL,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-            expires_at TIMESTAMPTZ NOT NULL
-        )
-        """
-    )
-    conn.execute(
-        """
-        CREATE INDEX IF NOT EXISTS user_sessions_token_hash_idx
-        ON user_sessions (token_hash)
-        """
-    )
-    conn.execute(
-        """
-        CREATE INDEX IF NOT EXISTS user_sessions_user_expires_idx
-        ON user_sessions (user_id, expires_at DESC)
-        """
-    )
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS password_reset_tokens (
-            id TEXT PRIMARY KEY,
-            user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-            token_hash TEXT UNIQUE NOT NULL,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-            expires_at TIMESTAMPTZ NOT NULL,
-            used_at TIMESTAMPTZ
-        )
-        """
-    )
-    conn.execute(
-        """
-        CREATE INDEX IF NOT EXISTS password_reset_tokens_token_hash_idx
-        ON password_reset_tokens (token_hash)
-        """
-    )
-    conn.execute(
-        """
-        CREATE INDEX IF NOT EXISTS password_reset_tokens_user_expires_idx
-        ON password_reset_tokens (user_id, expires_at DESC)
-        """
-    )
-    conn.commit()
+def _to_auth_user(user: User) -> AuthUser:
+    return AuthUser(id=user.id, email=user.email, display_name=user.display_name)
 
 
-def auth_connection() -> psycopg.Connection:
-    conn = get_connection()
-    create_auth_schema(conn)
-    return conn
-
-
-def row_to_user(row: dict) -> AuthUser:
-    return AuthUser(
-        id=row["id"],
-        email=row["email"],
-        display_name=row["display_name"],
-    )
-
-
-def get_user_by_email(conn: psycopg.Connection, email: str) -> tuple[AuthUser, str] | None:
-    row = conn.execute(
-        """
-        SELECT id, email, display_name, password_hash
-        FROM users
-        WHERE email = %s
-        """,
-        (email,),
-        prepare=False,
-    ).fetchone()
-    if row is None:
+def get_user_by_email(session: Session, email: str) -> tuple[AuthUser, str] | None:
+    user = session.scalar(select(User).where(User.email == email))
+    if user is None:
         return None
-    user = AuthUser(id=row[0], email=row[1], display_name=row[2])
-    return user, row[3]
+    return _to_auth_user(user), user.password_hash
 
 
-def get_user_by_id(conn: psycopg.Connection, user_id: str) -> AuthUser | None:
-    row = conn.execute(
-        """
-        SELECT id, email, display_name
-        FROM users
-        WHERE id = %s
-        """,
-        (user_id,),
-        prepare=False,
-    ).fetchone()
-    if row is None:
-        return None
-    return AuthUser(id=row[0], email=row[1], display_name=row[2])
+def get_user_by_id(session: Session, user_id: str) -> AuthUser | None:
+    user = session.get(User, user_id)
+    return _to_auth_user(user) if user else None
 
 
 def create_user(
-    conn: psycopg.Connection,
+    session: Session,
     email: str,
     password_hash: str,
     display_name: str | None,
 ) -> AuthUser:
-    user_id = str(uuid4())
-    row = conn.execute(
-        """
-        INSERT INTO users (id, email, display_name, password_hash)
-        VALUES (%s, %s, %s, %s)
-        RETURNING id, email, display_name
-        """,
-        (user_id, email, display_name, password_hash),
-    ).fetchone()
-    return AuthUser(id=row[0], email=row[1], display_name=row[2])
+    user = User(
+        id=str(uuid4()),
+        email=email,
+        display_name=display_name,
+        password_hash=password_hash,
+    )
+    session.add(user)
+    session.flush()
+    return _to_auth_user(user)
 
 
-def create_session(conn: psycopg.Connection, user: AuthUser) -> CreatedSession:
+def create_session(session: Session, user: AuthUser) -> CreatedSession:
     token = create_session_token()
     expires_at = datetime.now(timezone.utc) + timedelta(days=session_ttl_days())
-    conn.execute(
-        """
-        INSERT INTO user_sessions (id, user_id, token_hash, expires_at)
-        VALUES (%s, %s, %s, %s)
-        """,
-        (str(uuid4()), user.id, hash_session_token(token), expires_at),
+    session.add(
+        UserSession(
+            id=str(uuid4()),
+            user_id=user.id,
+            token_hash=hash_session_token(token),
+            expires_at=expires_at,
+        )
     )
     return CreatedSession(token=token, expires_at=expires_at, user=user)
 
 
 def create_password_reset_record(
-    conn: psycopg.Connection,
+    session: Session,
     user: AuthUser,
     token_hash: str,
     ttl_minutes: int,
 ) -> None:
-    expires_at = datetime.now(timezone.utc) + timedelta(minutes=ttl_minutes)
-    conn.execute(
-        """
-        INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at)
-        VALUES (%s, %s, %s, %s)
-        """,
-        (str(uuid4()), user.id, token_hash, expires_at),
+    session.add(
+        PasswordResetToken(
+            id=str(uuid4()),
+            user_id=user.id,
+            token_hash=token_hash,
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=ttl_minutes),
+        )
     )
 
 
-def get_valid_password_reset_user_id(conn: psycopg.Connection, token_hash: str) -> str | None:
-    row = conn.execute(
-        """
-        SELECT user_id
-        FROM password_reset_tokens
-        WHERE token_hash = %s
-          AND used_at IS NULL
-          AND expires_at > now()
-        """,
-        (token_hash,),
-        prepare=False,
-    ).fetchone()
-    return row[0] if row else None
-
-
-def mark_password_reset_token_used(conn: psycopg.Connection, token_hash: str) -> None:
-    conn.execute(
-        """
-        UPDATE password_reset_tokens
-        SET used_at = now()
-        WHERE token_hash = %s
-        """,
-        (token_hash,),
+def get_valid_password_reset_user_id(session: Session, token_hash: str) -> str | None:
+    return session.scalar(
+        select(PasswordResetToken.user_id).where(
+            PasswordResetToken.token_hash == token_hash,
+            PasswordResetToken.used_at.is_(None),
+            PasswordResetToken.expires_at > func.now(),
+        )
     )
 
 
-def update_user_password(conn: psycopg.Connection, user_id: str, password_hash: str) -> None:
-    conn.execute(
-        """
-        UPDATE users
-        SET password_hash = %s,
-            updated_at = now()
-        WHERE id = %s
-        """,
-        (password_hash, user_id),
+def mark_password_reset_token_used(session: Session, token_hash: str) -> None:
+    session.execute(
+        update(PasswordResetToken)
+        .where(PasswordResetToken.token_hash == token_hash)
+        .values(used_at=func.now())
     )
 
 
-def delete_user_sessions(conn: psycopg.Connection, user_id: str) -> None:
-    conn.execute(
-        "DELETE FROM user_sessions WHERE user_id = %s",
-        (user_id,),
+def update_user_password(session: Session, user_id: str, password_hash: str) -> None:
+    session.execute(
+        update(User)
+        .where(User.id == user_id)
+        .values(password_hash=password_hash, updated_at=func.now())
     )
+
+
+def delete_user_sessions(session: Session, user_id: str) -> None:
+    session.execute(delete(UserSession).where(UserSession.user_id == user_id))
 
 
 def get_user_by_session_token(token: str) -> AuthUser | None:
-    conn = auth_connection()
-    try:
-        token_hash = hash_session_token(token)
-        with conn.cursor(row_factory=dict_row) as cursor:
-            row = cursor.execute(
-                """
-                SELECT users.id, users.email, users.display_name
-                FROM user_sessions
-                JOIN users ON users.id = user_sessions.user_id
-                WHERE user_sessions.token_hash = %s
-                  AND user_sessions.expires_at > now()
-                """,
-                (token_hash,),
-            ).fetchone()
-        if row is None:
-            return None
-        return row_to_user(row)
-    finally:
-        conn.close()
+    with SessionLocal() as session:
+        user = session.scalar(
+            select(User)
+            .join(UserSession, UserSession.user_id == User.id)
+            .where(
+                UserSession.token_hash == hash_session_token(token),
+                UserSession.expires_at > func.now(),
+            )
+        )
+        return _to_auth_user(user) if user else None
 
 
 def delete_session_token(token: str) -> None:
-    conn = auth_connection()
-    try:
-        conn.execute(
-            "DELETE FROM user_sessions WHERE token_hash = %s",
-            (hash_session_token(token),),
+    with SessionLocal.begin() as session:
+        session.execute(
+            delete(UserSession).where(
+                UserSession.token_hash == hash_session_token(token)
+            )
         )
-        conn.commit()
-    finally:
-        conn.close()
