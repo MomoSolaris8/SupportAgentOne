@@ -9,7 +9,6 @@ from supportagent.db.session import SessionLocal
 from supportagent.storage import get_storage
 from supportagent.uploads.store import (
     create_uploaded_file,
-    ensure_upload_schema,
     fetch_uploaded_files,
 )
 from supportagent.vision.service import analyze_image
@@ -74,7 +73,6 @@ async def save_uploaded_image(
     )
     image_summary = image_analysis.summary(filename)
 
-    ensure_upload_schema()
     with SessionLocal.begin() as session:
         create_uploaded_file(
             session,

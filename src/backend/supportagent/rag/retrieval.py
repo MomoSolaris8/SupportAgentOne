@@ -1,15 +1,18 @@
+from supportagent.db.session import SessionLocal
+
 from .embeddings import embed_texts, get_embedding_client
-from .vector_store import get_connection, search
+from .vector_store import search
 
 DEFAULT_LIMIT = 5
 
 
-def retrieve(question: str, limit: int = DEFAULT_LIMIT, source_filter: str | None = None) -> list[dict]:
+def retrieve(
+    question: str, limit: int = DEFAULT_LIMIT, source_filter: str | None = None
+) -> list[dict]:
     client = get_embedding_client()
     query_embedding = embed_texts(client, [question])[0]
 
-    conn = get_connection()
-    try:
-        return search(conn, query_embedding, limit=limit, source_filter=source_filter)
-    finally:
-        conn.close()
+    with SessionLocal() as session:
+        return search(
+            session, query_embedding, limit=limit, source_filter=source_filter
+        )

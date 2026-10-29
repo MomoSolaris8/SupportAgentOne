@@ -1,4 +1,6 @@
-from supportagent.rag.vector_store import get_connection
+from sqlalchemy import text
+
+from supportagent.db.session import engine
 
 
 def health() -> dict[str, str]:
@@ -6,9 +8,6 @@ def health() -> dict[str, str]:
 
 
 def readiness() -> dict[str, str]:
-    conn = get_connection()
-    try:
-        conn.execute("SELECT 1").fetchone()
-    finally:
-        conn.close()
+    with engine.connect() as conn:
+        conn.execute(text("SELECT 1"))
     return {"status": "ready"}
