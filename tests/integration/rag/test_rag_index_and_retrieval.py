@@ -1,6 +1,8 @@
 import pytest
+from sqlalchemy import text
 
 from supportagent.core.models import Document
+from supportagent.db.session import SessionLocal
 from supportagent.rag import index, retrieval
 from supportagent.rag.retrieval import retrieve
 
@@ -85,3 +87,21 @@ def test_limit_caps_number_of_chunks(monkeypatch):
     )
 
     assert len(retrieve("Auto", limit=2)) == 2
+
+
+def test_cosine_search_can_use_hnsw_index():
+    with SessionLocal() as session:
+        session.execute(text("SET LOCAL enable_seqscan = off"))
+        plan = (
+            session.execute(
+                text(
+                    "EXPLAIN SELECT id FROM chunks "
+                    "ORDER BY embedding <=> CAST(:q AS vector) LIMIT 5"
+                ),
+                {"q": str(WATER)},
+            )
+            .scalars()
+            .all()
+        )
+
+    assert any("chunks_embedding_hnsw_idx" in line for line in plan)

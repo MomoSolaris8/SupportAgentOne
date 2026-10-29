@@ -1,7 +1,7 @@
 from typing import Any
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import Integer, Text, UniqueConstraint
+from sqlalchemy import Index, Integer, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -10,7 +10,15 @@ from supportagent.db.base import Base
 
 class Chunk(Base):
     __tablename__ = "chunks"
-    __table_args__ = (UniqueConstraint("document_id", "chunk_index"),)
+    __table_args__ = (
+        UniqueConstraint("document_id", "chunk_index"),
+        Index(
+            "chunks_embedding_hnsw_idx",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     document_id: Mapped[str] = mapped_column(Text)
