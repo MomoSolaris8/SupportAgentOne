@@ -4,6 +4,8 @@ from pathlib import Path
 from urllib.parse import quote
 
 import requests
+from azure.identity import DefaultAzureCredential
+from azure.storage.blob import BlobServiceClient, ContentSettings
 
 try:
     import boto3
@@ -141,10 +143,40 @@ class S3ObjectStorage(ObjectStorage):
         return response["Body"].read()
 
 
+class AzureBlobObjectStorage(ObjectStorage):
+    provider = "azure"
+
+    def __init__(self) -> None:
+        self.bucket = os.environ.get("AZURE_STORAGE_CONTAINER", "uploads")
+        connection_string = os.environ.get("AZURE_STORAGE_CONNECTION_STRING")
+        if connection_string:
+            # Local development and tests use Azurite.
+            self.client = BlobServiceClient.from_connection_string(connection_string)
+        else:
+            # In Azure, sign in as the Container App's managed identity, so there is no key to leak.
+            self.client = BlobServiceClient(
+                account_url=os.environ["AZURE_STORAGE_ACCOUNT_URL"],
+                credential=DefaultAzureCredential(),
+            )
+
+    def put_object(self, key: str, content: bytes, content_type: str) -> StoredObject:
+        self.client.get_blob_client(self.bucket, key).upload_blob(
+            content,
+            overwrite=True,
+            content_settings=ContentSettings(content_type=content_type),
+        )
+        return StoredObject(provider=self.provider, bucket=self.bucket, key=key)
+
+    def get_object(self, bucket: str, key: str) -> bytes:
+        return self.client.get_blob_client(bucket, key).download_blob().readall()
+
+
 def get_storage(provider: str | None = None) -> ObjectStorage:
     provider = (provider or os.environ.get("FILE_STORAGE_PROVIDER", "local")).lower()
     if provider == "supabase":
         return SupabaseObjectStorage()
+    if provider == "azure":
+        return AzureBlobObjectStorage()
     if provider in {"s3", "minio"}:
         return S3ObjectStorage()
     if provider == "local":
