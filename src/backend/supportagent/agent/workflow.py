@@ -104,6 +104,7 @@ def update_langfuse_trace(
         logger.exception("langfuse_trace_failed")
 
 
+@observe(name="route", capture_input=False, capture_output=False)
 def route_node(state: AgentState) -> AgentState:
     question = state["question"]
     source_filter = state.get("source_filter")
@@ -126,6 +127,7 @@ def route_node(state: AgentState) -> AgentState:
     }
 
 
+@observe(name="load_memory", capture_input=False, capture_output=False)
 def load_memory_node(state: AgentState) -> AgentState:
     short_history, long_memories = load_memory_context(
         thread_id=state.get("thread_id"),
@@ -144,6 +146,7 @@ def load_memory_node(state: AgentState) -> AgentState:
     }
 
 
+@observe(name="mcp_tools", capture_input=False, capture_output=False)
 def mcp_tool_node(state: AgentState) -> AgentState:
     result = run_dynamic_mcp_agent_sync(
         state["question"],
@@ -189,6 +192,7 @@ def route_after_mcp(state: AgentState) -> Literal["route", "__end__"]:
     return "route"
 
 
+@observe(name="rewrite", capture_input=False, capture_output=False)
 def rewrite_node(state: AgentState) -> AgentState:
     rewrite = rewrite_query(state["question"])
     logger.info(
@@ -200,6 +204,7 @@ def rewrite_node(state: AgentState) -> AgentState:
     return {"rewrite": rewrite}
 
 
+@observe(name="retrieve", capture_input=False, capture_output=False)
 def retrieve_node(state: AgentState) -> AgentState:
     rewrite = state["rewrite"]
     effective_source_filter = state.get("effective_source_filter")
@@ -208,6 +213,7 @@ def retrieve_node(state: AgentState) -> AgentState:
     return {"chunks": chunks}
 
 
+@observe(name="check_evidence", capture_input=False, capture_output=False)
 def check_evidence_node(state: AgentState) -> AgentState:
     chunks = state["chunks"]
     evidence = check_evidence(chunks)
@@ -225,11 +231,13 @@ def route_after_evidence(state: AgentState) -> Literal["refuse_answer", "generat
     return "generate_answer"
 
 
+@observe(name="refuse_answer", capture_input=False, capture_output=False)
 def refuse_answer_node(state: AgentState) -> AgentState:
     logger.info("agent_refusal reason=%s", state["evidence"].reason)
     return {"answer": REFUSAL_TEXT}
 
 
+@observe(name="generate_answer", capture_input=False, capture_output=False)
 def generate_answer_node(state: AgentState) -> AgentState:
     chunks = state["chunks"]
     answer = generate_answer(
