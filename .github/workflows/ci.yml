@@ -25,6 +25,10 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      azurite:
+        image: mcr.microsoft.com/azure-storage/azurite:3.34.0
+        ports:
+          - 10000:10000
 
     env:
       CHAT_MODEL: qwen-plus
@@ -56,7 +60,7 @@ jobs:
         run: python -m pytest
 
       - name: Run integration tests
-        run: python -m pytest tests/integration --run-integration --deselect tests/integration/storage
+        run: python -m pytest tests/integration --run-integration --deselect tests/integration/storage/test_supabase_storage_integration.py
 
       - name: Run offline claim evaluation
         run: |
