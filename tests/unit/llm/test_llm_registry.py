@@ -3,6 +3,7 @@ import pytest
 from supportagent.llm.registry import (
     ModelConfigurationError,
     get_model_options,
+    get_provider_settings,
     resolve_model,
 )
 
@@ -15,6 +16,8 @@ def clear_model_environment(monkeypatch):
         "CLAIM_REVIEW_MODEL",
         "DASHSCOPE_API_KEY",
         "DASHSCOPE_BASE_URL",
+        "DEEPSEEK_API_KEY",
+        "DEEPSEEK_BASE_URL",
         "EMBEDDING_API_KEY",
         "EMBEDDING_BASE_URL",
         "KIMI_API_KEY",
@@ -129,4 +132,52 @@ def test_unknown_model_in_allowlist_is_rejected(monkeypatch):
     monkeypatch.setenv("CHAT_MODELS", "made-up-model")
 
     with pytest.raises(ModelConfigurationError, match="Unknown model ids"):
+        get_model_options()
+
+
+def test_deepseek_uses_its_own_api_key(monkeypatch):
+    clear_model_environment(monkeypatch)
+    monkeypatch.setenv("CHAT_MODELS", "qwen-plus,deepseek-v4-pro")
+    monkeypatch.setenv("DASHSCOPE_API_KEY", "qwen-key")
+    monkeypatch.setenv("DASHSCOPE_BASE_URL", "https://qwen.example/v1")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "deepseek-key")
+
+    selected = resolve_model("deepseek-v4-pro", task="chat")
+    settings = get_provider_settings("deepseek")
+
+    assert selected.provider == "deepseek"
+    assert selected.provider_model == "deepseek-v4-pro"
+    assert settings.api_key == "deepseek-key"
+    assert settings.base_url == "https://api.deepseek.com"
+
+
+def test_deepseek_is_hidden_without_its_api_key(monkeypatch):
+    clear_model_environment(monkeypatch)
+    monkeypatch.setenv("CHAT_MODELS", "qwen-plus,deepseek-v4-pro")
+    monkeypatch.setenv("DASHSCOPE_API_KEY", "qwen-key")
+    monkeypatch.setenv("DASHSCOPE_BASE_URL", "https://qwen.example/v1")
+
+    options = get_model_options()
+
+    assert [option.id for option in options] == ["qwen-plus"]
+
+
+def test_latest_qwen_max_is_available(monkeypatch):
+    clear_model_environment(monkeypatch)
+    monkeypatch.setenv("CHAT_MODELS", "qwen-plus,qwen3.8-max")
+    monkeypatch.setenv("DASHSCOPE_API_KEY", "qwen-key")
+    monkeypatch.setenv("DASHSCOPE_BASE_URL", "https://qwen.example/v1")
+
+    selected = resolve_model("qwen3.8-max", task="chat")
+
+    assert selected.provider_model == "qwen3.8-max"
+
+
+def test_retired_qwen3_max_is_rejected(monkeypatch):
+    clear_model_environment(monkeypatch)
+    monkeypatch.setenv("CHAT_MODELS", "qwen-plus,qwen3-max")
+    monkeypatch.setenv("DASHSCOPE_API_KEY", "qwen-key")
+    monkeypatch.setenv("DASHSCOPE_BASE_URL", "https://qwen.example/v1")
+
+    with pytest.raises(ModelConfigurationError, match="qwen3-max"):
         get_model_options()

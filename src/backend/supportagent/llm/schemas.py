@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-ProviderName = Literal["qwen", "openai", "anthropic", "kimi"]
+ProviderName = Literal["qwen", "openai", "anthropic", "kimi", "deepseek"]
 LLMTask = Literal["chat", "claim_review", "tool", "vision"]
 ModelCapability = Literal["text", "tools", "vision"]
 

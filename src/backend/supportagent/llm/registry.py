@@ -39,12 +39,12 @@ def _base_profiles() -> dict[str, ModelProfile]:
             description="Higher-quality Qwen model for complex questions.",
         ),
         ModelProfile(
-            id="qwen3-max",
-            label="Qwen3 Max",
+            id="qwen3.8-max",
+            label="Qwen3.8 Max",
             provider="qwen",
-            provider_model="qwen3-max",
+            provider_model="qwen3.8-max",
             capabilities=frozenset({"text", "tools"}),
-            description="Advanced Qwen model for demanding agent tasks.",
+            description="Latest Qwen model for demanding agent tasks.",
         ),
         ModelProfile(
             id="gpt-5-mini",
@@ -80,6 +80,14 @@ def _base_profiles() -> dict[str, ModelProfile]:
             provider_model=os.environ.get("KIMI_K3_MODEL", "kimi-k3"),
             capabilities=frozenset({"text", "tools"}),
             description="Latest Moonshot model for demanding agent tasks.",
+        ),
+        ModelProfile(
+            id="deepseek-v4-pro",
+            label="DeepSeek V4 Pro",
+            provider="deepseek",
+            provider_model="deepseek-v4-pro",
+            capabilities=frozenset({"text", "tools"}),
+            description="DeepSeek model for reasoning and agentic tasks.",
         ),
     ]
     vision_model = os.environ.get("VISION_MODEL", "").strip()
@@ -126,6 +134,12 @@ def get_provider_settings(provider: ProviderName) -> ProviderSettings:
             name=provider,
             api_key=os.environ.get("ANTHROPIC_API_KEY", ""),
             base_url=os.environ.get("ANTHROPIC_BASE_URL") or None,
+        )
+    if provider == "deepseek":
+        return ProviderSettings(
+            name=provider,
+            api_key=os.environ.get("DEEPSEEK_API_KEY", ""),
+            base_url=os.environ.get("DEEPSEEK_BASE_URL") or "https://api.deepseek.com",
         )
     return ProviderSettings(
         name=provider,

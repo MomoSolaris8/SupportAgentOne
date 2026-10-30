@@ -28,7 +28,7 @@ jobs:
 
     env:
       CHAT_MODEL: qwen-plus
-      CHAT_MODELS: qwen-plus,qwen-max,qwen3-max
+      CHAT_MODELS: qwen-plus,qwen-max,qwen3.8-max,deepseek-v4-pro
       EMBEDDING_API_KEY: ci-placeholder
       EMBEDDING_BASE_URL: https://example.invalid/v1
       DATABASE_URL: postgresql://supportagent:supportagent@localhost:5432/supportagent
