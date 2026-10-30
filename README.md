@@ -79,7 +79,7 @@ language, p95 latency and cost per request from live token usage:
 
 ```bash
 python -m supportagent.evaluation.online_runner \
-  --models qwen3-max,kimi-k2.6,claude-sonnet-4 \
+  --models qwen3.8-max,kimi-k2.6,claude-sonnet-4 \
   --trials 3 --min-pass-rate 0.75 --confirm-live
 ```
 
@@ -470,7 +470,7 @@ Start with two cases and one trial per model:
 
 ```bash
 python -m supportagent.evaluation.online_runner \
-  --models qwen3-max,kimi-k2.6,claude-sonnet-4 \
+  --models qwen3.8-max,kimi-k2.6,claude-sonnet-4 \
   --cases household-standard-coverage,weather-out-of-domain-refusal \
   --trials 1 \
   --confirm-live
@@ -480,7 +480,7 @@ After the smoke run succeeds, run the interview benchmark with three trials:
 
 ```bash
 python -m supportagent.evaluation.online_runner \
-  --models qwen3-max,kimi-k2.6,claude-sonnet-4 \
+  --models qwen3.8-max,kimi-k2.6,claude-sonnet-4 \
   --trials 3 \
   --min-pass-rate 0.75 \
   --confirm-live
@@ -514,7 +514,7 @@ for the configured account, and run:
 
 ```bash
 python -m supportagent.evaluation.online_runner \
-  --models qwen3-max,kimi-k2.6,claude-sonnet-4 \
+  --models qwen3.8-max,kimi-k2.6,claude-sonnet-4 \
   --trials 3 \
   --pricing evals/model_pricing.local.json \
   --confirm-live

@@ -71,11 +71,13 @@ services:
       KIMI_BASE_URL: ${KIMI_BASE_URL:-https://api.moonshot.ai/v1}
       KIMI_K2_6_MODEL: ${KIMI_K2_6_MODEL:-kimi-k2.6}
       KIMI_K3_MODEL: ${KIMI_K3_MODEL:-kimi-k3}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      DEEPSEEK_BASE_URL: ${DEEPSEEK_BASE_URL:-https://api.deepseek.com}
       CHAT_MODEL: ${CHAT_MODEL:-qwen-plus}
-      CHAT_MODELS: ${CHAT_MODELS:-qwen-plus,qwen-max,qwen3-max,gpt-5-mini,claude-sonnet-4,kimi-k2.6,kimi-k3}
+      CHAT_MODELS: ${CHAT_MODELS:-qwen-plus,qwen-max,qwen3.8-max,deepseek-v4-pro,gpt-5-mini,claude-sonnet-4,kimi-k2.6,kimi-k3}
       CLAIM_REVIEW_MODEL: ${CLAIM_REVIEW_MODEL:-qwen-max}
       TOOL_MODEL: ${TOOL_MODEL:-qwen-plus}
-      VISION_MODEL: ${VISION_MODEL:-qwen-vl-plus}
+      VISION_MODEL: ${VISION_MODEL:-qwen3-vl-plus}
       VISION_PROVIDER: ${VISION_PROVIDER:-qwen}
       FRONTEND_URL: ${FRONTEND_URL:?set FRONTEND_URL}
       MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
