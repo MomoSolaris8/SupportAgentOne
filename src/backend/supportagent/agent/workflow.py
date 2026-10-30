@@ -2,7 +2,7 @@ import logging
 from dataclasses import dataclass
 from typing import Literal, TypedDict
 
-from langfuse import get_client
+from langfuse import get_client, observe, propagate_attributes
 from langgraph.graph import END, START, StateGraph
 
 from supportagent.agent.evidence import EvidenceDecision, check_evidence
@@ -60,52 +60,46 @@ class AgentState(TypedDict, total=False):
     mcp_error: str | None
 
 
-def record_langfuse_trace(
+def update_langfuse_trace(
     question: str,
     source_filter: str | None,
     effective_source_filter: str | None,
     result: AgentResult,
 ) -> None:
-    client = get_client()
-
     try:
-        with client.start_as_current_observation(
-            as_type="span",
-            name="answer_with_agent",
-        ) as span:
-            span.update(
-                input={
-                    "question": question,
-                    "source_filter": source_filter,
-                },
-                output={
-                    "answer": result.answer,
-                },
-                metadata={
-                    "effective_source_filter": effective_source_filter,
-                    "short_memory_count": result.short_memory_count,
-                    "long_memory_count": result.long_memory_count,
-                    "route_source": result.route.source,
-                    "route_reason": result.route.reason,
-                    "rewrite_changed": result.rewrite.changed,
-                    "rewritten_query": result.rewrite.rewritten_query,
-                    "evidence_status": result.evidence.status,
-                    "evidence_reason": result.evidence.reason,
-                    "chunk_count": len(result.chunks),
-                    "mcp_tool_calls": [
-                        {
-                            "server": tool_call.server,
-                            "tool": tool_call.tool,
-                            "arguments": tool_call.arguments,
-                        }
-                        for tool_call in result.mcp_tool_calls or []
-                    ],
-                    "mcp_error": result.mcp_error,
-                    "enabled_skills": result.enabled_skills or [],
-                    "model": result.model,
-                    "image_count": result.image_count,
-                },
-            )
+        get_client().update_current_span(
+            input={
+                "question": question,
+                "source_filter": source_filter,
+            },
+            output={
+                "answer": result.answer,
+            },
+            metadata={
+                "effective_source_filter": effective_source_filter,
+                "short_memory_count": result.short_memory_count,
+                "long_memory_count": result.long_memory_count,
+                "route_source": result.route.source,
+                "route_reason": result.route.reason,
+                "rewrite_changed": result.rewrite.changed,
+                "rewritten_query": result.rewrite.rewritten_query,
+                "evidence_status": result.evidence.status,
+                "evidence_reason": result.evidence.reason,
+                "chunk_count": len(result.chunks),
+                "mcp_tool_calls": [
+                    {
+                        "server": tool_call.server,
+                        "tool": tool_call.tool,
+                        "arguments": tool_call.arguments,
+                    }
+                    for tool_call in result.mcp_tool_calls or []
+                ],
+                "mcp_error": result.mcp_error,
+                "enabled_skills": result.enabled_skills or [],
+                "model": result.model,
+                "image_count": result.image_count,
+            },
+        )
     except Exception:
         logger.exception("langfuse_trace_failed")
 
@@ -296,6 +290,7 @@ def build_agent_graph():
 AGENT_GRAPH = build_agent_graph()
 
 
+@observe(name="answer_with_agent", capture_input=False, capture_output=False)
 def answer_with_agent(
     question: str,
     source_filter: str | None = None,
@@ -306,50 +301,51 @@ def answer_with_agent(
     enabled_mcp_servers: list[str] | None = None,
     enabled_skills: list[str] | None = None,
 ) -> AgentResult:
-    logger.info("agent_start source_filter=%s question=%r", source_filter, question)
-    model = resolve_model(requested_model, task="chat").id
-    state = AGENT_GRAPH.invoke(
-        {
-            "question": question,
-            "source_filter": source_filter,
-            "thread_id": thread_id,
-            "user_id": user_id,
-            "model": model,
-            "image_contexts": image_contexts or [],
-            "enabled_mcp_servers": enabled_mcp_servers,
-            "enabled_skills": enabled_skills,
-        }
-    )
-    chunks = state["chunks"]
-    evidence = state["evidence"]
-    decision = state["route"]
-    rewrite = state["rewrite"]
-    effective_source_filter = state.get("effective_source_filter")
+    with propagate_attributes(user_id=user_id, session_id=thread_id):
+        logger.info("agent_start source_filter=%s question=%r", source_filter, question)
+        model = resolve_model(requested_model, task="chat").id
+        state = AGENT_GRAPH.invoke(
+            {
+                "question": question,
+                "source_filter": source_filter,
+                "thread_id": thread_id,
+                "user_id": user_id,
+                "model": model,
+                "image_contexts": image_contexts or [],
+                "enabled_mcp_servers": enabled_mcp_servers,
+                "enabled_skills": enabled_skills,
+            }
+        )
+        chunks = state["chunks"]
+        evidence = state["evidence"]
+        decision = state["route"]
+        rewrite = state["rewrite"]
+        effective_source_filter = state.get("effective_source_filter")
 
-    result = AgentResult(
-        answer=state["answer"],
-        chunks=chunks,
-        route=decision,
-        evidence=evidence,
-        rewrite=rewrite,
-        short_memory_count=len(state.get("short_history", [])),
-        long_memory_count=len(state.get("long_memories", [])),
-        mcp_tool_calls=state.get("mcp_tool_calls", []),
-        mcp_error=state.get("mcp_error"),
-        enabled_skills=enabled_skills or [],
-        model=model,
-        image_count=len(image_contexts or []),
-    )
-    save_memory_turn(
-        thread_id=thread_id,
-        user_id=user_id,
-        question=question,
-        answer=result.answer,
-    )
-    record_langfuse_trace(
-        question=question,
-        source_filter=source_filter,
-        effective_source_filter=effective_source_filter,
-        result=result,
-    )
-    return result
+        result = AgentResult(
+            answer=state["answer"],
+            chunks=chunks,
+            route=decision,
+            evidence=evidence,
+            rewrite=rewrite,
+            short_memory_count=len(state.get("short_history", [])),
+            long_memory_count=len(state.get("long_memories", [])),
+            mcp_tool_calls=state.get("mcp_tool_calls", []),
+            mcp_error=state.get("mcp_error"),
+            enabled_skills=enabled_skills or [],
+            model=model,
+            image_count=len(image_contexts or []),
+        )
+        save_memory_turn(
+            thread_id=thread_id,
+            user_id=user_id,
+            question=question,
+            answer=result.answer,
+        )
+        update_langfuse_trace(
+            question=question,
+            source_filter=source_filter,
+            effective_source_filter=effective_source_filter,
+            result=result,
+        )
+        return result
