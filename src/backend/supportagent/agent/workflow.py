@@ -2,6 +2,7 @@ import logging
 from dataclasses import dataclass
 from typing import Literal, TypedDict
 
+from langfuse import get_client
 from langgraph.graph import END, START, StateGraph
 
 from supportagent.agent.evidence import EvidenceDecision, check_evidence
@@ -12,7 +13,6 @@ from supportagent.core.answer import (
     answer_reports_insufficient_evidence,
     generate_answer,
 )
-from supportagent.integrations.langfuse_client import get_langfuse_client
 from supportagent.llm import resolve_model
 from supportagent.memory import ChatMessage, LongMemory, load_memory_context, save_memory_turn
 from supportagent.mcp_client.tool_agent import MCPToolCallTrace, run_dynamic_mcp_agent_sync
@@ -66,9 +66,7 @@ def record_langfuse_trace(
     effective_source_filter: str | None,
     result: AgentResult,
 ) -> None:
-    client = get_langfuse_client()
-    if client is None:
-        return
+    client = get_client()
 
     try:
         with client.start_as_current_observation(
@@ -108,8 +106,6 @@ def record_langfuse_trace(
                     "image_count": result.image_count,
                 },
             )
-
-        client.flush()
     except Exception:
         logger.exception("langfuse_trace_failed")
 

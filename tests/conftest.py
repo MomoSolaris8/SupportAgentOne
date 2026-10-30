@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import pytest
@@ -5,6 +6,9 @@ import pytest
 
 TEST_ROOT = Path(__file__).parent.resolve()
 PROJECT_ROOT = TEST_ROOT.parent
+
+# Never send test traces to the real Langfuse project.
+os.environ["LANGFUSE_TRACING_ENABLED"] = "false"
 
 
 @pytest.fixture(scope="session")
