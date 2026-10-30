@@ -25,10 +25,6 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
-      azurite:
-        image: mcr.microsoft.com/azure-storage/azurite:3.34.0
-        ports:
-          - 10000:10000
 
     env:
       CHAT_MODEL: qwen-plus
@@ -42,6 +38,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Start Azurite
+        run: docker run -d -p 10000:10000 mcr.microsoft.com/azure-storage/azurite:3.34.0 azurite-blob --blobHost 0.0.0.0 --skipApiVersionCheck
 
       - name: Set up Python
         uses: actions/setup-python@v5
