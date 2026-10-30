@@ -39,6 +39,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Start Azurite
+        run: docker run -d -p 10000:10000 mcr.microsoft.com/azure-storage/azurite:3.34.0 azurite-blob --blobHost 0.0.0.0 --skipApiVersionCheck
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -56,7 +59,7 @@ jobs:
         run: python -m pytest
 
       - name: Run integration tests
-        run: python -m pytest tests/integration --run-integration --deselect tests/integration/storage
+        run: python -m pytest tests/integration --run-integration --deselect tests/integration/storage/test_supabase_storage_integration.py
 
       - name: Run offline claim evaluation
         run: |
