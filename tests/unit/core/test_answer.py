@@ -1,23 +1,52 @@
 from supportagent.core.answer import (
-    REFUSAL_TEXT,
     answer_reports_insufficient_evidence,
     enforce_answer_contract,
     generate_answer,
 )
 from supportagent.llm import ChatCompletion
+from supportagent.prompts.insurance_knowledge import (
+    INSUFFICIENT_EVIDENCE_MARKER,
+    REFUSAL_TEXT,
+    REFUSAL_TEXTS,
+    TERM_NOT_DEFINED_MARKER,
+    TERM_NOT_DEFINED_TEXTS,
+)
 
 
 def test_generate_answer_refuses_when_no_chunks_are_retrieved():
     assert generate_answer("Was ist versichert?", []) == REFUSAL_TEXT
 
 
+def test_generate_answer_refuses_in_the_question_language_when_no_chunks_are_retrieved():
+    assert (
+        generate_answer("Does my car insurance cover glass damage?", [])
+        == REFUSAL_TEXTS["en"]
+    )
+
+
 def test_answer_contract_removes_content_mixed_with_refusal():
     answer = (
         "Der Begriff **Schädigung** bezeichnet allgemein einen Schaden.\n\n"
-        f"{REFUSAL_TEXT}"
+        f"{INSUFFICIENT_EVIDENCE_MARKER}"
     )
 
     assert enforce_answer_contract(answer) == REFUSAL_TEXT
+
+
+def test_answer_contract_replaces_refusal_marker_in_the_answer_language():
+    assert (
+        enforce_answer_contract(INSUFFICIENT_EVIDENCE_MARKER, "en")
+        == REFUSAL_TEXTS["en"]
+    )
+
+
+def test_answer_contract_replaces_term_marker_in_the_answer_language():
+    answer = enforce_answer_contract(
+        f"{TERM_NOT_DEFINED_MARKER} Do you mean a loss event?", "en"
+    )
+
+    assert answer == f"{TERM_NOT_DEFINED_TEXTS['en']} Do you mean a loss event?"
+    assert answer_reports_insufficient_evidence(answer) is True
 
 
 def test_answer_contract_preserves_grounded_markdown():
@@ -27,12 +56,10 @@ def test_answer_contract_preserves_grounded_markdown():
 
 
 def test_terminology_gap_reports_insufficient_evidence():
-    answer = (
-        "Der Begriff **„Schädigung“** ist in den freigegebenen Quellen nicht "
-        "ausdrücklich definiert. Meinen Sie einen Schaden?"
-    )
+    answer = f"{TERM_NOT_DEFINED_TEXTS['de']} Meinen Sie einen Schaden?"
 
     assert answer_reports_insufficient_evidence(answer) is True
+    assert answer_reports_insufficient_evidence(REFUSAL_TEXTS["en"]) is True
     assert answer_reports_insufficient_evidence(
         "Die **Selbstbeteiligung** ist ein vertraglich vereinbarter Anteil [1]."
     ) is False

@@ -108,7 +108,7 @@ def test_review_graph_uses_verified_evidence_and_only_proposes_write(monkeypatch
 
 def test_review_graph_refuses_without_policy_evidence_and_does_not_call_model(monkeypatch):
     from supportagent.claims import review_workflow
-    from supportagent.core.answer import REFUSAL_TEXT
+    from supportagent.prompts.insurance_knowledge import REFUSAL_TEXT
 
     monkeypatch.setattr(
         review_workflow,

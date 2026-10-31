@@ -1,4 +1,4 @@
-from .contract import REFUSAL_TEXT
+from .contract import INSUFFICIENT_EVIDENCE_MARKER, TERM_NOT_DEFINED_MARKER
 
 # These examples are a stable prompt prefix. They teach response boundaries and formatting;
 # their synthetic source text must never be treated as runtime insurance evidence.
@@ -37,8 +37,7 @@ FEW_SHOT_MESSAGES: tuple[dict[str, str], ...] = (
     {
         "role": "assistant",
         "content": (
-            "Der Begriff **„Schädigung“** ist in den freigegebenen Quellen nicht "
-            "ausdrücklich definiert. Meinen Sie einen Schaden, ein Schadenereignis oder "
+            f"{TERM_NOT_DEFINED_MARKER} Meinen Sie einen Schaden, ein Schadenereignis oder "
             "die Verursachung eines Schadens?"
         ),
     },
@@ -56,6 +55,6 @@ FEW_SHOT_MESSAGES: tuple[dict[str, str], ...] = (
     },
     {
         "role": "assistant",
-        "content": REFUSAL_TEXT,
+        "content": INSUFFICIENT_EVIDENCE_MARKER,
     },
 )

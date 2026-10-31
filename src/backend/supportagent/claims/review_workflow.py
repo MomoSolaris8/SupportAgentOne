@@ -28,7 +28,8 @@ from supportagent.claims.service import (
     get_claim,
     record_claim_review_progress,
 )
-from supportagent.core.answer import REFUSAL_TEXT, generate_answer
+from supportagent.core.answer import generate_answer
+from supportagent.prompts.insurance_knowledge import REFUSAL_TEXT
 from supportagent.rag.retrieval import retrieve
 
 
