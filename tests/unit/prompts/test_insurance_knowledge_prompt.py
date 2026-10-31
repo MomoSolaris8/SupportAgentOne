@@ -1,5 +1,6 @@
 from supportagent.prompts.insurance_knowledge import (
     FEW_SHOT_MESSAGES,
+    IMAGE_ONLY_SYSTEM_PROMPT,
     PROMPT_VERSION,
     REFUSAL_TEXT,
     SYSTEM_PROMPT,
@@ -7,7 +8,7 @@ from supportagent.prompts.insurance_knowledge import (
 
 
 def test_prompt_is_versioned_and_process_driven():
-    assert PROMPT_VERSION == "insurance-knowledge-v2.0"
+    assert PROMPT_VERSION == "insurance-knowledge-v2.1"
     assert "# Entscheidungsprozess" in SYSTEM_PROMPT
     assert "`terminology`" in SYSTEM_PROMPT
     assert "`policy_question`" in SYSTEM_PROMPT
@@ -32,3 +33,10 @@ def test_few_shot_examples_cover_three_decision_boundaries():
     assert 'type="terminology_unsupported"' in user_examples[1]["content"]
     assert 'type="high_risk_unsupported"' in user_examples[2]["content"]
     assert assistant_examples[2]["content"] == REFUSAL_TEXT
+
+
+def test_prompts_answer_in_the_requested_language():
+    for prompt in (SYSTEM_PROMPT, IMAGE_ONLY_SYSTEM_PROMPT):
+        assert "Antworte auf Deutsch" not in prompt
+        assert "Antwortsprache" in prompt
+    assert "Ablehnungstext immer unverändert auf Deutsch" in SYSTEM_PROMPT

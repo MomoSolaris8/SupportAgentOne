@@ -133,3 +133,44 @@ def test_generate_answer_prefers_image_path_for_image_question(monkeypatch):
     assert "Fahrzeugschaden" in answer
     assert "keine verlässlichen Wissensquellen" in captured["messages"][0]["content"]
     assert "Quellen:" not in captured["messages"][-1]["content"]
+
+
+def test_generate_answer_asks_for_the_question_language(monkeypatch):
+    captured = {}
+
+    def fake_complete_chat(messages, **kwargs):
+        captured["messages"] = messages
+        return ChatCompletion(content="answer", model_id="qwen-plus", provider="qwen")
+
+    monkeypatch.setattr("supportagent.core.answer.complete_chat", fake_complete_chat)
+
+    generate_answer(
+        "Does my car insurance cover glass damage?",
+        [
+            {
+                "content": "Glasbruch ist in der Teilkasko versichert.",
+                "metadata": {"source": "confluence", "title": "Teilkasko"},
+            }
+        ],
+    )
+
+    assert "Antwortsprache: English" in captured["messages"][-1]["content"]
+
+
+def test_generate_answer_asks_for_the_question_language_on_image_path(monkeypatch):
+    captured = {}
+
+    def fake_complete_chat(messages, **kwargs):
+        captured["messages"] = messages
+        return ChatCompletion(content="answer", model_id="qwen-plus", provider="qwen")
+
+    monkeypatch.setattr("supportagent.core.answer.complete_chat", fake_complete_chat)
+
+    generate_answer(
+        "What do you see in the image?",
+        [],
+        image_contexts=["Image id: img-1\nObservation: Sichtbarer Fahrzeugschaden."],
+    )
+
+    assert "Antwortsprache: English" in captured["messages"][-1]["content"]
+    

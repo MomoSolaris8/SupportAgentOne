@@ -1,3 +1,4 @@
+from supportagent.core.language import response_language_name
 from supportagent.llm import LLMTask, complete_chat
 from supportagent.memory.schemas import ChatMessage, LongMemory
 from supportagent.prompts.insurance_knowledge import (
@@ -75,6 +76,8 @@ def generate_answer(
     if not chunks and not image_contexts:
         return REFUSAL_TEXT
 
+    response_language = response_language_name(question)
+
     if image_contexts and (not chunks or is_image_focused_question(question)):
         image_context_text = "\n\n".join(image_contexts)
         response = complete_chat(
@@ -85,7 +88,8 @@ def generate_answer(
                     "content": (
                         "Bildbeobachtungen:\n"
                         f"{image_context_text}\n\n"
-                        f"Frage: {question}"
+                        f"Frage: {question}\n\n"
+                        f"Antwortsprache: {response_language}"
                     ),
                 },
             ],
@@ -124,7 +128,11 @@ def generate_answer(
             *FEW_SHOT_MESSAGES,
             {
                 "role": "user",
-                "content": f"{memory_context}\n\n{skill_context}\n\n{image_context}\n\nFrage: {question}\n\nQuellen:\n{context}",
+                "content": (
+                    f"{memory_context}\n\n{skill_context}\n\n{image_context}\n\n"
+                    f"Frage: {question}\n\nAntwortsprache: {response_language}\n\n"
+                    f"Quellen:\n{context}"
+                ),
             },
         ],
         requested_model=model,

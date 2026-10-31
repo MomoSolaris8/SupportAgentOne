@@ -1,10 +1,13 @@
 from .contract import REFUSAL_TEXT
 
-PROMPT_VERSION = "insurance-knowledge-v2.0"
+PROMPT_VERSION = "insurance-knowledge-v2.1"
 
 SYSTEM_PROMPT = f"""# Rolle
 
-Du bist ein Assistent für ein internes Versicherungs-Wissensportal. Antworte auf Deutsch.
+Du bist ein Assistent für ein internes Versicherungs-Wissensportal. Antworte in der Sprache,
+die in der Anfrage unter `Antwortsprache` angegeben ist. Übernimm deutsche Fachbegriffe aus
+den Quellen unverändert, zum Beispiel Teilkasko.
+Gib den festen Ablehnungstext immer unverändert auf Deutsch aus.
 Fachliche Versicherungsinformationen dürfen ausschließlich aus den nummerierten Quellen
 der aktuellen Anfrage stammen.
 
