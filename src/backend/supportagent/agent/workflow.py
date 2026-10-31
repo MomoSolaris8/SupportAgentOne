@@ -2,6 +2,7 @@ import logging
 from dataclasses import dataclass
 from typing import Literal, TypedDict
 
+from langfuse import get_client, observe, propagate_attributes
 from langgraph.graph import END, START, StateGraph
 
 from supportagent.agent.evidence import EvidenceDecision, check_evidence
@@ -12,7 +13,6 @@ from supportagent.core.answer import (
     answer_reports_insufficient_evidence,
     generate_answer,
 )
-from supportagent.integrations.langfuse_client import get_langfuse_client
 from supportagent.llm import resolve_model
 from supportagent.memory import ChatMessage, LongMemory, load_memory_context, save_memory_turn
 from supportagent.mcp_client.tool_agent import MCPToolCallTrace, run_dynamic_mcp_agent_sync
@@ -60,60 +60,51 @@ class AgentState(TypedDict, total=False):
     mcp_error: str | None
 
 
-def record_langfuse_trace(
+def update_langfuse_trace(
     question: str,
     source_filter: str | None,
     effective_source_filter: str | None,
     result: AgentResult,
 ) -> None:
-    client = get_langfuse_client()
-    if client is None:
-        return
-
     try:
-        with client.start_as_current_observation(
-            as_type="span",
-            name="answer_with_agent",
-        ) as span:
-            span.update(
-                input={
-                    "question": question,
-                    "source_filter": source_filter,
-                },
-                output={
-                    "answer": result.answer,
-                },
-                metadata={
-                    "effective_source_filter": effective_source_filter,
-                    "short_memory_count": result.short_memory_count,
-                    "long_memory_count": result.long_memory_count,
-                    "route_source": result.route.source,
-                    "route_reason": result.route.reason,
-                    "rewrite_changed": result.rewrite.changed,
-                    "rewritten_query": result.rewrite.rewritten_query,
-                    "evidence_status": result.evidence.status,
-                    "evidence_reason": result.evidence.reason,
-                    "chunk_count": len(result.chunks),
-                    "mcp_tool_calls": [
-                        {
-                            "server": tool_call.server,
-                            "tool": tool_call.tool,
-                            "arguments": tool_call.arguments,
-                        }
-                        for tool_call in result.mcp_tool_calls or []
-                    ],
-                    "mcp_error": result.mcp_error,
-                    "enabled_skills": result.enabled_skills or [],
-                    "model": result.model,
-                    "image_count": result.image_count,
-                },
-            )
-
-        client.flush()
+        get_client().update_current_span(
+            input={
+                "question": question,
+                "source_filter": source_filter,
+            },
+            output={
+                "answer": result.answer,
+            },
+            metadata={
+                "effective_source_filter": effective_source_filter,
+                "short_memory_count": result.short_memory_count,
+                "long_memory_count": result.long_memory_count,
+                "route_source": result.route.source,
+                "route_reason": result.route.reason,
+                "rewrite_changed": result.rewrite.changed,
+                "rewritten_query": result.rewrite.rewritten_query,
+                "evidence_status": result.evidence.status,
+                "evidence_reason": result.evidence.reason,
+                "chunk_count": len(result.chunks),
+                "mcp_tool_calls": [
+                    {
+                        "server": tool_call.server,
+                        "tool": tool_call.tool,
+                        "arguments": tool_call.arguments,
+                    }
+                    for tool_call in result.mcp_tool_calls or []
+                ],
+                "mcp_error": result.mcp_error,
+                "enabled_skills": result.enabled_skills or [],
+                "model": result.model,
+                "image_count": result.image_count,
+            },
+        )
     except Exception:
         logger.exception("langfuse_trace_failed")
 
 
+@observe(name="route", capture_input=False, capture_output=False)
 def route_node(state: AgentState) -> AgentState:
     question = state["question"]
     source_filter = state.get("source_filter")
@@ -136,6 +127,7 @@ def route_node(state: AgentState) -> AgentState:
     }
 
 
+@observe(name="load_memory", capture_input=False, capture_output=False)
 def load_memory_node(state: AgentState) -> AgentState:
     short_history, long_memories = load_memory_context(
         thread_id=state.get("thread_id"),
@@ -154,6 +146,7 @@ def load_memory_node(state: AgentState) -> AgentState:
     }
 
 
+@observe(name="mcp_tools", capture_input=False, capture_output=False)
 def mcp_tool_node(state: AgentState) -> AgentState:
     result = run_dynamic_mcp_agent_sync(
         state["question"],
@@ -199,6 +192,7 @@ def route_after_mcp(state: AgentState) -> Literal["route", "__end__"]:
     return "route"
 
 
+@observe(name="rewrite", capture_input=False, capture_output=False)
 def rewrite_node(state: AgentState) -> AgentState:
     rewrite = rewrite_query(state["question"])
     logger.info(
@@ -210,6 +204,7 @@ def rewrite_node(state: AgentState) -> AgentState:
     return {"rewrite": rewrite}
 
 
+@observe(name="retrieve", capture_input=False, capture_output=False)
 def retrieve_node(state: AgentState) -> AgentState:
     rewrite = state["rewrite"]
     effective_source_filter = state.get("effective_source_filter")
@@ -218,6 +213,7 @@ def retrieve_node(state: AgentState) -> AgentState:
     return {"chunks": chunks}
 
 
+@observe(name="check_evidence", capture_input=False, capture_output=False)
 def check_evidence_node(state: AgentState) -> AgentState:
     chunks = state["chunks"]
     evidence = check_evidence(chunks)
@@ -235,11 +231,13 @@ def route_after_evidence(state: AgentState) -> Literal["refuse_answer", "generat
     return "generate_answer"
 
 
+@observe(name="refuse_answer", capture_input=False, capture_output=False)
 def refuse_answer_node(state: AgentState) -> AgentState:
     logger.info("agent_refusal reason=%s", state["evidence"].reason)
     return {"answer": REFUSAL_TEXT}
 
 
+@observe(name="generate_answer", capture_input=False, capture_output=False)
 def generate_answer_node(state: AgentState) -> AgentState:
     chunks = state["chunks"]
     answer = generate_answer(
@@ -300,6 +298,7 @@ def build_agent_graph():
 AGENT_GRAPH = build_agent_graph()
 
 
+@observe(name="answer_with_agent", capture_input=False, capture_output=False)
 def answer_with_agent(
     question: str,
     source_filter: str | None = None,
@@ -310,50 +309,51 @@ def answer_with_agent(
     enabled_mcp_servers: list[str] | None = None,
     enabled_skills: list[str] | None = None,
 ) -> AgentResult:
-    logger.info("agent_start source_filter=%s question=%r", source_filter, question)
-    model = resolve_model(requested_model, task="chat").id
-    state = AGENT_GRAPH.invoke(
-        {
-            "question": question,
-            "source_filter": source_filter,
-            "thread_id": thread_id,
-            "user_id": user_id,
-            "model": model,
-            "image_contexts": image_contexts or [],
-            "enabled_mcp_servers": enabled_mcp_servers,
-            "enabled_skills": enabled_skills,
-        }
-    )
-    chunks = state["chunks"]
-    evidence = state["evidence"]
-    decision = state["route"]
-    rewrite = state["rewrite"]
-    effective_source_filter = state.get("effective_source_filter")
+    with propagate_attributes(user_id=user_id, session_id=thread_id):
+        logger.info("agent_start source_filter=%s question=%r", source_filter, question)
+        model = resolve_model(requested_model, task="chat").id
+        state = AGENT_GRAPH.invoke(
+            {
+                "question": question,
+                "source_filter": source_filter,
+                "thread_id": thread_id,
+                "user_id": user_id,
+                "model": model,
+                "image_contexts": image_contexts or [],
+                "enabled_mcp_servers": enabled_mcp_servers,
+                "enabled_skills": enabled_skills,
+            }
+        )
+        chunks = state["chunks"]
+        evidence = state["evidence"]
+        decision = state["route"]
+        rewrite = state["rewrite"]
+        effective_source_filter = state.get("effective_source_filter")
 
-    result = AgentResult(
-        answer=state["answer"],
-        chunks=chunks,
-        route=decision,
-        evidence=evidence,
-        rewrite=rewrite,
-        short_memory_count=len(state.get("short_history", [])),
-        long_memory_count=len(state.get("long_memories", [])),
-        mcp_tool_calls=state.get("mcp_tool_calls", []),
-        mcp_error=state.get("mcp_error"),
-        enabled_skills=enabled_skills or [],
-        model=model,
-        image_count=len(image_contexts or []),
-    )
-    save_memory_turn(
-        thread_id=thread_id,
-        user_id=user_id,
-        question=question,
-        answer=result.answer,
-    )
-    record_langfuse_trace(
-        question=question,
-        source_filter=source_filter,
-        effective_source_filter=effective_source_filter,
-        result=result,
-    )
-    return result
+        result = AgentResult(
+            answer=state["answer"],
+            chunks=chunks,
+            route=decision,
+            evidence=evidence,
+            rewrite=rewrite,
+            short_memory_count=len(state.get("short_history", [])),
+            long_memory_count=len(state.get("long_memories", [])),
+            mcp_tool_calls=state.get("mcp_tool_calls", []),
+            mcp_error=state.get("mcp_error"),
+            enabled_skills=enabled_skills or [],
+            model=model,
+            image_count=len(image_contexts or []),
+        )
+        save_memory_turn(
+            thread_id=thread_id,
+            user_id=user_id,
+            question=question,
+            answer=result.answer,
+        )
+        update_langfuse_trace(
+            question=question,
+            source_filter=source_filter,
+            effective_source_filter=effective_source_filter,
+            result=result,
+        )
+        return result

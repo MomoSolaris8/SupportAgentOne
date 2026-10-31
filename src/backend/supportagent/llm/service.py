@@ -2,6 +2,8 @@ from functools import lru_cache
 from time import perf_counter
 from typing import Any
 
+from langfuse import get_client
+
 from supportagent.llm.errors import LLMError, map_provider_error
 from supportagent.llm.providers import AnthropicProvider, OpenAICompatibleProvider
 from supportagent.llm.providers.base import ChatProvider
@@ -35,29 +37,60 @@ def complete_chat(
 ) -> ChatCompletion:
     profile = resolve_model(requested_model, task=task)
     started = perf_counter()
-    try:
-        completion = _provider(profile.provider).complete(
-            profile,
-            messages,
-            temperature=temperature,
-            tools=tools,
-            tool_choice=tool_choice,
-        )
-        record_llm_usage(
-            LLMCallUsage(
-                provider=profile.provider,
-                model_id=profile.id,
-                provider_model=profile.provider_model,
-                latency_ms=(perf_counter() - started) * 1000,
-                usage=completion.usage,
+    with get_client().start_as_current_observation(
+        name=f"llm:{task}",
+        as_type="generation",
+        model=profile.provider_model,
+        input=messages,
+        model_parameters={"temperature": temperature},
+    ) as generation:
+        try:
+            completion = _provider(profile.provider).complete(
+                profile,
+                messages,
+                temperature=temperature,
+                tools=tools,
+                tool_choice=tool_choice,
             )
-        )
-        return completion
-    except LLMError:
-        raise
-    except Exception as error:
-        raise map_provider_error(
-            error,
-            provider=profile.provider,
-            model=profile.id,
-        ) from error
+            record_llm_usage(
+                LLMCallUsage(
+                    provider=profile.provider,
+                    model_id=profile.id,
+                    provider_model=profile.provider_model,
+                    latency_ms=(perf_counter() - started) * 1000,
+                    usage=completion.usage,
+                )
+            )
+            generation.update(
+                output=_generation_output(completion),
+                usage_details={
+                    "input": completion.usage.input_tokens,
+                    "output": completion.usage.output_tokens,
+                },
+                metadata={
+                    "provider": profile.provider,
+                    "reasoning_tokens": completion.usage.reasoning_tokens,
+                    "cached_input_tokens": completion.usage.cached_input_tokens,
+                },
+            )
+            return completion
+        except LLMError as error:
+            generation.update(level="ERROR", status_message=str(error))
+            raise
+        except Exception as error:
+            mapped = map_provider_error(
+                error,
+                provider=profile.provider,
+                model=profile.id,
+            )
+            generation.update(level="ERROR", status_message=str(mapped))
+            raise mapped from error
+
+
+def _generation_output(completion: ChatCompletion) -> Any:
+    if not completion.tool_calls:
+        return completion.content
+    return {
+        "content": completion.content,
+        "tool_calls": [{"name": call.name, "arguments": call.arguments} for call in completion.tool_calls],
+    }

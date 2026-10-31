@@ -1,10 +1,37 @@
+import os
 from pathlib import Path
 
 import pytest
+from langfuse import Langfuse
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 
 TEST_ROOT = Path(__file__).parent.resolve()
 PROJECT_ROOT = TEST_ROOT.parent
+
+# Never send test traces to the real Langfuse project.
+os.environ["LANGFUSE_TRACING_ENABLED"] = "false"
+
+# Langfuse keeps one client per public key for the whole process, so every test shares this exporter.
+LANGFUSE_SPANS = InMemorySpanExporter()
+
+
+@pytest.fixture
+def langfuse_spans(monkeypatch):
+    """Turn tracing on for one test and return a function that lists the finished spans."""
+    monkeypatch.setenv("LANGFUSE_TRACING_ENABLED", "true")
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-test")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk-test")
+    monkeypatch.setenv("LANGFUSE_BASE_URL", "http://localhost:1")
+    client = Langfuse(span_exporter=LANGFUSE_SPANS)
+    client.flush()
+    LANGFUSE_SPANS.clear()
+
+    def finished_spans():
+        client.flush()
+        return LANGFUSE_SPANS.get_finished_spans()
+
+    return finished_spans
 
 
 @pytest.fixture(scope="session")

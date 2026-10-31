@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
+from langfuse import get_client
 
 from supportagent.api.exception_handlers import register_exception_handlers
 from supportagent.api.middleware import register_request_logging
@@ -17,6 +18,7 @@ configure_logging()
 async def lifespan(_app: FastAPI):
     yield
     engine.dispose()
+    get_client().shutdown()
 
 
 app = FastAPI(title="SupportAgent", lifespan=lifespan)
