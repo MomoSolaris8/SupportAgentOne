@@ -9,9 +9,9 @@ from supportagent.agent.evidence import EvidenceDecision, check_evidence
 from supportagent.agent.query_rewrite import QueryRewrite, rewrite_query
 from supportagent.agent.router import RouteDecision, route_question
 from supportagent.core.answer import (
-    REFUSAL_TEXT,
     answer_reports_insufficient_evidence,
     generate_answer,
+    refusal_text,
 )
 from supportagent.llm import resolve_model
 from supportagent.memory import ChatMessage, LongMemory, load_memory_context, save_memory_turn
@@ -234,7 +234,7 @@ def route_after_evidence(state: AgentState) -> Literal["refuse_answer", "generat
 @observe(name="refuse_answer", capture_input=False, capture_output=False)
 def refuse_answer_node(state: AgentState) -> AgentState:
     logger.info("agent_refusal reason=%s", state["evidence"].reason)
-    return {"answer": REFUSAL_TEXT}
+    return {"answer": refusal_text(state["question"])}
 
 
 @observe(name="generate_answer", capture_input=False, capture_output=False)

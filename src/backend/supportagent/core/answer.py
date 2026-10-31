@@ -1,10 +1,18 @@
+from supportagent.core.language import (
+    LANGUAGE_NAMES,
+    ResponseLanguage,
+    detect_response_language,
+)
 from supportagent.llm import LLMTask, complete_chat
 from supportagent.memory.schemas import ChatMessage, LongMemory
 from supportagent.prompts.insurance_knowledge import (
     FEW_SHOT_MESSAGES,
     IMAGE_ONLY_SYSTEM_PROMPT,
-    REFUSAL_TEXT,
+    INSUFFICIENT_EVIDENCE_MARKER,
+    REFUSAL_TEXTS,
     SYSTEM_PROMPT,
+    TERM_NOT_DEFINED_MARKER,
+    TERM_NOT_DEFINED_TEXTS,
 )
 
 
@@ -46,19 +54,24 @@ def format_long_memories(memories: list[LongMemory]) -> str:
     return "\n".join(f"- {memory.content}" for memory in memories)
 
 
-def enforce_answer_contract(answer: str) -> str:
-    """Keep the model from mixing a sourced answer with the fixed refusal."""
+def refusal_text(question: str) -> str:
+    return REFUSAL_TEXTS[detect_response_language(question)]
+
+
+def enforce_answer_contract(answer: str, language: ResponseLanguage = "de") -> str:
+    """Replace the model's evidence markers with fixed wording in the answer language."""
     normalized = answer.strip()
-    if "Ich kann diese Frage anhand der verfügbaren Quellen nicht verlässlich beantworten." in normalized:
-        return REFUSAL_TEXT
+    if INSUFFICIENT_EVIDENCE_MARKER in normalized:
+        return REFUSAL_TEXTS[language]
+    if TERM_NOT_DEFINED_MARKER in normalized:
+        clarification = normalized.replace(TERM_NOT_DEFINED_MARKER, "").strip()
+        return f"{TERM_NOT_DEFINED_TEXTS[language]} {clarification}".strip()
     return normalized
 
 
 def answer_reports_insufficient_evidence(answer: str) -> bool:
-    normalized = answer.casefold()
-    return answer == REFUSAL_TEXT or (
-        "in den freigegebenen quellen" in normalized
-        and "nicht ausdrücklich definiert" in normalized
+    return answer in REFUSAL_TEXTS.values() or answer.startswith(
+        tuple(TERM_NOT_DEFINED_TEXTS.values())
     )
 
 
@@ -72,8 +85,11 @@ def generate_answer(
     model: str | None = None,
     task: LLMTask = "chat",
 ) -> str:
+    language = detect_response_language(question)
     if not chunks and not image_contexts:
-        return REFUSAL_TEXT
+        return REFUSAL_TEXTS[language]
+
+    response_language = LANGUAGE_NAMES[language]
 
     if image_contexts and (not chunks or is_image_focused_question(question)):
         image_context_text = "\n\n".join(image_contexts)
@@ -85,7 +101,8 @@ def generate_answer(
                     "content": (
                         "Bildbeobachtungen:\n"
                         f"{image_context_text}\n\n"
-                        f"Frage: {question}"
+                        f"Frage: {question}\n\n"
+                        f"Antwortsprache: {response_language}"
                     ),
                 },
             ],
@@ -93,7 +110,7 @@ def generate_answer(
             task=task,
             temperature=0,
         )
-        return enforce_answer_contract(response.content)
+        return enforce_answer_contract(response.content, language)
 
     context = "\n\n".join(
         f"[{i}] ({chunk['metadata']['source']}) {chunk['metadata']['title']}\n{chunk['content']}"
@@ -124,11 +141,15 @@ def generate_answer(
             *FEW_SHOT_MESSAGES,
             {
                 "role": "user",
-                "content": f"{memory_context}\n\n{skill_context}\n\n{image_context}\n\nFrage: {question}\n\nQuellen:\n{context}",
+                "content": (
+                    f"{memory_context}\n\n{skill_context}\n\n{image_context}\n\n"
+                    f"Frage: {question}\n\nAntwortsprache: {response_language}\n\n"
+                    f"Quellen:\n{context}"
+                ),
             },
         ],
         requested_model=model,
         task=task,
         temperature=0,
     )
-    return enforce_answer_contract(response.content)
+    return enforce_answer_contract(response.content, language)

@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 from langfuse import Langfuse
+from langfuse._client.resource_manager import LangfuseResourceManager
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
 
@@ -12,9 +13,6 @@ PROJECT_ROOT = TEST_ROOT.parent
 # Never send test traces to the real Langfuse project.
 os.environ["LANGFUSE_TRACING_ENABLED"] = "false"
 
-# Langfuse keeps one client per public key for the whole process, so every test shares this exporter.
-LANGFUSE_SPANS = InMemorySpanExporter()
-
 
 @pytest.fixture
 def langfuse_spans(monkeypatch):
@@ -23,15 +21,18 @@ def langfuse_spans(monkeypatch):
     monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "pk-test")
     monkeypatch.setenv("LANGFUSE_SECRET_KEY", "sk-test")
     monkeypatch.setenv("LANGFUSE_BASE_URL", "http://localhost:1")
-    client = Langfuse(span_exporter=LANGFUSE_SPANS)
-    client.flush()
-    LANGFUSE_SPANS.clear()
+    # Langfuse keeps one client per public key for the whole process. Drop any client an earlier test
+    # created, so the new client is the only one and exports to this test's exporter.
+    LangfuseResourceManager.reset()
+    exporter = InMemorySpanExporter()
+    client = Langfuse(span_exporter=exporter)
 
     def finished_spans():
         client.flush()
-        return LANGFUSE_SPANS.get_finished_spans()
+        return exporter.get_finished_spans()
 
-    return finished_spans
+    yield finished_spans
+    LangfuseResourceManager.reset()
 
 
 @pytest.fixture(scope="session")

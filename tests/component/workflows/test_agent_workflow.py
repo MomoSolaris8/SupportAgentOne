@@ -1,5 +1,9 @@
 from supportagent.agent.workflow import answer_with_agent
-from supportagent.core.answer import REFUSAL_TEXT
+from supportagent.prompts.insurance_knowledge import (
+    REFUSAL_TEXT,
+    REFUSAL_TEXTS,
+    TERM_NOT_DEFINED_TEXTS,
+)
 
 
 def disable_mcp_tools(monkeypatch):
@@ -97,6 +101,18 @@ def test_agent_refuses_when_evidence_is_insufficient(monkeypatch):
     assert result.evidence.status == "insufficient"
 
 
+def test_agent_refuses_in_the_question_language(monkeypatch):
+    disable_mcp_tools(monkeypatch)
+    monkeypatch.setattr(
+        "supportagent.agent.workflow.retrieve", lambda question, source_filter=None: []
+    )
+
+    result = answer_with_agent("Does my car insurance cover glass damage?")
+
+    assert result.answer == REFUSAL_TEXTS["en"]
+    assert result.evidence.status == "insufficient"
+
+
 def test_agent_marks_model_refusal_as_insufficient_evidence(monkeypatch):
     disable_mcp_tools(monkeypatch)
     monkeypatch.setattr(
@@ -128,8 +144,7 @@ def test_agent_marks_unsupported_terminology_as_insufficient_evidence(monkeypatc
     monkeypatch.setattr(
         "supportagent.agent.workflow.generate_answer",
         lambda *args, **kwargs: (
-            "Der Begriff **„Schädigung“** ist in den freigegebenen Quellen nicht "
-            "ausdrücklich definiert. Meinen Sie einen Schaden?"
+            f"{TERM_NOT_DEFINED_TEXTS['de']} Meinen Sie einen Schaden?"
         ),
     )
 
